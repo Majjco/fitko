@@ -1,7 +1,7 @@
 // Service worker: apka sa otvorí okamžite z pamäte telefónu – aj bez signálu
 // alebo keď domáci server (Mac) práve nie je dostupný. Nová verzia sa stiahne
 // na pozadí a prejaví sa pri ďalšom otvorení.
-const CACHE = 'fitko-v2';
+const CACHE = 'fitko-v3';
 const SHELL = ['./', 'index.html', 'styles.css', 'app.js', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-180.png'];
 
 self.addEventListener('install', (e) => {

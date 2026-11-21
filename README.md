@@ -8,11 +8,12 @@ takže ich tréner vidí v tabuľke ako predtým.
 ## Čo apka vie
 
 - Automaticky otvorí **aktuálny týždeň** a zvýrazní **dnešný tréning**
+- Tréning **po jednom cviku**: hore prehľad 1 · 2 · 3…, rozbalený je len aktuálny cvik,
+  po uložení apka prejde na ďalší. Hotové cviky sa zbalia do riadku s výsledkom.
 - Pri každom cviku: plán od trénera (série × opak., váha, RPE), jeho poznámka a **čo si dal minule**
-- Supersety (`CVIK A + CVIK B`) zobrazené prehľadne pod sebou
-- Rýchly zápis: tlačidlo **Ok** (podľa plánu), váha, RPE na ťuknutie, poznámka pre trénera
-- **Časovač pauzy** (spustí sa sám po uložení cviku, pípne a zavibruje)
-- **Stopky tréningu** + RPE celého tréningu → zapíše sa do `WORKOUT TIME` a `SESH RPE`
+- Supersety (`CVIK A + CVIK B`) – jedno políčko ako v tabuľke, napr. `2x8 a 2x9`, RPE `8 a 7`
+- **Súhrn po tréningu**: počet cvikov, trvanie, zlepšenia oproti minule; zapíše `WORKOUT TIME` a `SESH RPE`
+- **Graf progresu** váhy pri každom cviku – aj zo starších blokov (napr. MESOCYCLE 1.0)
 - Funguje **offline** – keď vo fitku nie je signál, zápisy počkajú a odošlú sa neskôr
 - Dá sa pridať na plochu ako appka (iPhone: Zdieľať → Pridať na plochu)
 
@@ -29,9 +30,10 @@ Tréner ──píše──▶ Google tabuľka ◀──číta (verejný odkaz)�
   Skript beží pod tvojím Google účtom a zapisuje **iba** do EXECUTED stĺpcov.
   Trénerove PLANNED stĺpce nikdy nemení a ak tréner medzitým cvik prepíše, zápis odmietne.
 
-Apka očakáva rozloženie hárku, aké tréner používa: bloky `WEEK n`, riadky `DAY 1–7`,
-dátum v stĺpci B a 6 cvikov po 9 stĺpcoch od stĺpca D
-(názov, PLANNED série/váha/RPE/poznámka, EXECUTED série/váha/RPE/poznámka).
+Apka očakáva rozloženie hárku, aké tréner používa: bloky `WEEK n`, riadky `DAY 1–7`
+a cviky po 9 stĺpcoch (názov, PLANNED série/váha/RPE/poznámka, EXECUTED série/váha/RPE/poznámka).
+Polohu stĺpcov si zisťuje z hlavičiek `EXERCISE 1, 2…`, `DATE`, `NOTES`, `WORKOUT TIME`, `SESH RPE`,
+takže zvládne aj staršie bloky s inými stĺpcami.
 
 ## 1. Spustenie apky (GitHub Pages)
 

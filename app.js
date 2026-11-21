@@ -3,26 +3,18 @@
   'use strict';
 
   // ---------------------------------------------------------------------------
-  // Konštanty – rozloženie hárku (0-based stĺpce)
+  // Konštanty
   // ---------------------------------------------------------------------------
-  const FIRST_EX_COL = 3; // D
-  const EX_WIDTH = 9;
-  const EX_COUNT = 6;
-  const COL_DATE = 1; // B
-  const COL_DAY_NOTE = 2; // C
-  const COL_TIME = 57; // BF
-  const COL_SESH_PLANNED = 58; // BG
-  const COL_SESH_DONE = 59; // BH
   const DAY_NAMES = ['Ne', 'Po', 'Ut', 'St', 'Št', 'Pi', 'So'];
   const RPE_VALUES = ['6', '7', '7.5', '8', '8.5', '9', '9.5', '10'];
-  const REST_PRESETS = [60, 90, 120, 150, 180, 240];
+  const HISTORY_TTL = 24 * 60 * 60 * 1000;
   const LS = {
     config: 'fitko.config',
     plan: 'fitko.plan',
+    history: 'fitko.history',
     local: 'fitko.local',
     queue: 'fitko.queue',
     sessions: 'fitko.sessions',
-    rest: 'fitko.rest',
   };
 
   // ---------------------------------------------------------------------------
@@ -30,17 +22,19 @@
   // ---------------------------------------------------------------------------
   const state = {
     config: load(LS.config, { sheetId: '', sheetName: '', gid: '', scriptUrl: '', token: '' }),
-    plan: load(LS.plan, null), // { sheet, weeks, fetchedAt, source }
+    plan: load(LS.plan, null), // { sheet, weeks, fetchedAt, source, history: [names] }
+    history: load(LS.history, { fetchedAt: 0, sheets: [] }), // staršie bloky pre graf a „Minule“
     local: load(LS.local, {}), // key -> { fields, status, error }
     queue: load(LS.queue, []),
-    sessions: load(LS.sessions, {}), // dayKey -> { startedAt, finishedAt }
-    view: { name: 'week', weekIdx: null, dayKey: null },
+    sessions: load(LS.sessions, {}), // dayKey -> { startedAt, finishedAt, rpe, minutes }
+    view: { name: 'week', weekIdx: null, dayN: null, openEx: null },
+    sheetOpen: null, // 'summary' | 'progress' | null
+    progress: null, // { name, sel }
     loading: false,
     error: null,
-    sheetOpen: null, // 'rest' | 'finish' | null
-    rest: load(LS.rest, { endsAt: 0, duration: 90, last: 90 }),
     flushing: false,
   };
+  if (state.plan && !state.plan.v2) state.plan = null; // starý formát cache
 
   function load(key, fallback) {
     try {
@@ -66,6 +60,17 @@
   const pad = (n) => String(n).padStart(2, '0');
   const isoDate = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   const todayIso = () => isoDate(new Date());
+  const splitParts = (name) => String(name || '').split(/\s+\+\s+/).map((p) => p.trim()).filter(Boolean);
+  // Voľnejšie porovnanie názvov cvikov naprieč blokmi (len pre „Minule“ a graf):
+  // „CABLE LAT PULLDOWN - NEUTRAL GRIP“ = „CABLE LAT PULLDOWN“, „DUMBELL“ = „DB“…
+  const matchKey = (s) => norm(s)
+    .replace(/\(.*?\)/g, ' ')
+    .replace(/\s+-\s+.*$/, '')
+    .replace(/\bOF CHOICE\b/g, ' ')
+    .replace(/\bDUMB+ELLS?\b/g, 'DB')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const nameKey = (name) => splitParts(name).map(matchKey).join(' + ');
 
   function parseDate(raw) {
     const s = String(raw || '').trim();
@@ -90,11 +95,11 @@
     return null;
   }
 
-  function formatDate(iso) {
+  function formatDate(iso, withDay = true) {
     if (!iso) return '';
     const [y, m, d] = iso.split('-').map(Number);
     const date = new Date(y, m - 1, d);
-    return `${DAY_NAMES[date.getDay()]} ${d}.${m}.`;
+    return withDay ? `${DAY_NAMES[date.getDay()]} ${d}.${m}.` : `${d}.${m}.`;
   }
 
   function prettySets(s) {
@@ -112,9 +117,31 @@
     if (/^[\d\s.,\-–+]+$/.test(s)) return s.replace(/-/g, '–') + ' kg';
     return s;
   }
-  function prettyRpe(r) {
-    const s = String(r || '').trim();
-    return s ? s.replace(/-/g, '–') : '–';
+  const prettyRpe = (r) => (String(r || '').trim() ? String(r).trim().replace(/-/g, '–') : '–');
+
+  // „45 a 12“ -> [45, 12];  „50 a 2x6“ -> [50, 6];  „Ok“ -> [null]
+  function weightParts(w) {
+    const s = String(w || '').trim();
+    if (!s) return [];
+    return s.split(/\s+a\s+|\s*\+\s*|\s*\/\s*|\s*;\s*|\s*&\s*/i).map((seg) => {
+      const clean = seg.replace(/\d+\s*[x×]\s*(?=\d)/gi, '');
+      const m = clean.match(/\d+(?:[.,]\d+)?/);
+      return m ? parseFloat(m[0].replace(',', '.')) : null;
+    });
+  }
+  const fmtKg = (n) => (Math.round(n * 10) / 10).toString().replace('.', ',');
+
+  function doneSummary(done) {
+    const parts = [];
+    if (done.sets) parts.push(done.sets === 'Ok' ? 'Ok' : prettySets(done.sets));
+    if (done.weight) parts.push(prettyWeight(done.weight));
+    if (done.rpe) parts.push('RPE ' + done.rpe);
+    return parts.join(' · ');
+  }
+
+  function cap(s) {
+    const t = String(s || '').trim().toLowerCase();
+    return t.charAt(0).toUpperCase() + t.slice(1);
   }
 
   function toast(msg) {
@@ -133,18 +160,23 @@
   }
 
   // ---------------------------------------------------------------------------
-  // Načítanie plánu
+  // Načítanie a parsovanie hárku
   // ---------------------------------------------------------------------------
+  async function scriptGet(params) {
+    const url = new URL(state.config.scriptUrl);
+    url.searchParams.set('token', state.config.token);
+    for (const [k, v] of Object.entries(params || {})) if (v) url.searchParams.set(k, v);
+    const res = await fetch(url.toString(), { redirect: 'follow' });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'Chyba skriptu');
+    return data;
+  }
+
   async function fetchGrid() {
     const c = state.config;
     if (hasWrite()) {
-      const url = new URL(c.scriptUrl);
-      url.searchParams.set('token', c.token);
-      if (c.sheetName) url.searchParams.set('sheet', c.sheetName);
-      const res = await fetch(url.toString(), { redirect: 'follow' });
-      const data = await res.json();
-      if (!data.ok) throw new Error(data.error || 'Chyba skriptu');
-      return { sheet: data.sheet, rows: data.rows.map((r) => r.c), source: 'script' };
+      const data = await scriptGet({ sheet: c.sheetName });
+      return { sheet: data.sheet, rows: data.rows.map((r) => r.c), source: 'script', history: data.history || null };
     }
     if (!c.sheetId) throw new Error('Chýba odkaz na tabuľku');
     const names = c.sheetName ? [c.sheetName, c.sheetName + ' ', c.sheetName.trim()] : [''];
@@ -152,7 +184,7 @@
     for (const name of [...new Set(names)]) {
       try {
         const rows = await fetchGviz(c.sheetId, name, c.gid);
-        return { sheet: name || 'Hárok', rows, source: 'public' };
+        return { sheet: name || 'Hárok', rows, source: 'public', history: null };
       } catch (e) {
         lastErr = e;
       }
@@ -164,7 +196,7 @@
     const url = new URL(`https://docs.google.com/spreadsheets/d/${id}/gviz/tq`);
     url.searchParams.set('tqx', 'out:json');
     url.searchParams.set('headers', '0');
-    url.searchParams.set('range', 'A1:BH1500');
+    url.searchParams.set('range', 'A1:CZ1500');
     if (sheetName) url.searchParams.set('sheet', sheetName);
     else if (gid) url.searchParams.set('gid', gid);
     url.searchParams.set('_', Date.now());
@@ -184,11 +216,36 @@
     return rows;
   }
 
+  /*
+   * Rozloženie stĺpcov sa zisťuje z hlavičiek („EXERCISE 1“, „DATE“, „NOTES“,
+   * „WORKOUT TIME“, „SESH RPE“), takže apka zvládne aj staršie bloky, kde cviky
+   * začínajú inde. Každý cvik má 9 stĺpcov: názov, 4× PLANNED, 4× EXECUTED.
+   */
   function parsePlan(rows) {
     const weeks = [];
     let week = null;
+    let layout = { exCols: [3, 12, 21, 30, 39, 48].map((col, i) => ({ n: i + 1, col })), date: 1, note: 2, time: 57, seshPlanned: 58, seshDone: 59 };
     for (const c of rows) {
-      const a = String(c[0] || '').trim();
+      const cells = c.map((v) => String(v || '').trim());
+      const exCols = [];
+      cells.forEach((v, i) => {
+        const m = v.match(/^EXERCISE\s*(\d+)$/i);
+        if (m) exCols.push({ n: +m[1], col: i });
+      });
+      if (exCols.length) {
+        const first = exCols[0].col;
+        const find = (re, before) => cells.findIndex((v, i) => re.test(v) && (before == null || i < before));
+        const sesh = cells.map((v, i) => (/^SESH RPE$/i.test(v) ? i : -1)).filter((i) => i >= 0);
+        layout = {
+          exCols,
+          date: Math.max(0, find(/^DATE$/i, first)) || 1,
+          note: find(/^NOTES$/i, first),
+          time: find(/^WORKOUT TIME$/i),
+          seshPlanned: sesh[0] != null ? sesh[0] : -1,
+          seshDone: sesh[1] != null ? sesh[1] : -1,
+        };
+      }
+      const a = cells[0] || '';
       const w = a.match(/^WEEK\s*(\d+)/i);
       if (w) {
         week = { n: +w[1], days: [] };
@@ -197,22 +254,25 @@
       }
       const d = a.match(/^DAY\s*(\d+)/i);
       if (!week || !d) continue;
+      const at = (i) => (i >= 0 ? cells[i] || '' : '');
       const day = {
         n: +d[1],
-        date: parseDate(c[COL_DATE]),
-        note: String(c[COL_DAY_NOTE] || '').trim(),
-        time: String(c[COL_TIME] || '').trim(),
-        seshPlanned: String(c[COL_SESH_PLANNED] || '').trim(),
-        seshDone: String(c[COL_SESH_DONE] || '').trim(),
+        date: parseDate(at(layout.date)),
+        note: at(layout.note),
+        time: at(layout.time),
+        seshPlanned: at(layout.seshPlanned),
+        seshDone: at(layout.seshDone),
+        timeCol: layout.time >= 0 ? layout.time + 1 : null,
+        rpeCol: layout.seshDone >= 0 ? layout.seshDone + 1 : null,
         exercises: [],
       };
-      for (let i = 0; i < EX_COUNT; i++) {
-        const b = FIRST_EX_COL + i * EX_WIDTH;
-        const name = String(c[b] || '').trim();
+      for (const { n, col } of layout.exCols) {
+        const name = at(col);
         if (!name) continue;
-        const v = (k) => String(c[b + k] || '').trim();
+        const v = (k) => at(col + k);
         day.exercises.push({
-          idx: i,
+          idx: n - 1,
+          col: col + 1, // 1-based stĺpec názvu cviku (pre zápis)
           name,
           planned: { sets: v(1), weight: v(2), rpe: v(3), note: v(4) },
           done: { sets: v(5), weight: v(6), rpe: v(7), note: v(8) },
@@ -233,7 +293,7 @@
       const grid = await fetchGrid();
       const weeks = parsePlan(grid.rows);
       if (!weeks.length) throw new Error('Plán je prázdny – nenašiel som žiadny „WEEK“ blok');
-      state.plan = { sheet: grid.sheet, weeks, fetchedAt: Date.now(), source: grid.source };
+      state.plan = { v2: true, sheet: grid.sheet, weeks, fetchedAt: Date.now(), source: grid.source, history: grid.history };
       save(LS.plan, state.plan);
       // Hodnoty, ktoré už sú v tabuľke, netreba držať lokálne.
       for (const [k, e] of Object.entries(state.local)) {
@@ -246,6 +306,26 @@
       state.loading = false;
       render();
     }
+    loadHistory();
+  }
+
+  // Staršie bloky (napr. MESOCYCLE 1.0) – len pre graf a „Minule“. Raz za deň.
+  async function loadHistory() {
+    if (!hasWrite() || !state.plan || !Array.isArray(state.plan.history)) return;
+    const names = state.plan.history.filter((n) => n !== state.plan.sheet);
+    const cachedNames = state.history.sheets.map((s) => s.name).join('|');
+    if (Date.now() - state.history.fetchedAt < HISTORY_TTL && cachedNames === names.join('|')) return;
+    const sheets = [];
+    for (const name of names) {
+      try {
+        const data = await scriptGet({ sheet: name });
+        const weeks = parsePlan(data.rows.map((r) => r.c));
+        if (weeks.length) sheets.push({ name, weeks });
+      } catch (_) { /* hárok preskočíme */ }
+    }
+    state.history = { fetchedAt: Date.now(), sheets };
+    save(LS.history, state.history);
+    render();
   }
 
   // ---------------------------------------------------------------------------
@@ -260,25 +340,26 @@
   }
   const hasAny = (f) => Boolean(f && (f.sets || f.weight || f.rpe));
 
+  function enqueue(item) {
+    state.queue = state.queue.filter((q) => q.key !== item.key);
+    state.queue.push(item);
+    save(LS.queue, state.queue);
+    flushQueue().then(render);
+  }
+
   function saveExercise(week, day, ex, fields) {
     const key = exKey(week.n, day.n, ex.idx);
     state.local[key] = { fields, status: hasWrite() ? 'pending' : 'local' };
     save(LS.local, state.local);
     if (hasWrite()) {
-      state.queue = state.queue.filter((q) => q.key !== key);
-      state.queue.push({ key, sheet: state.plan.sheet, week: week.n, day: day.n, ex: ex.idx, name: ex.name, fields });
-      save(LS.queue, state.queue);
-      flushQueue().then(render);
+      enqueue({ key, sheet: state.plan.sheet, week: week.n, day: day.n, ex: ex.idx, col: ex.col, name: ex.name, fields });
     }
   }
 
   function saveSession(week, day, session) {
     if (!hasWrite()) return;
     const key = 'session|' + dayKey(week.n, day.n);
-    state.queue = state.queue.filter((q) => q.key !== key);
-    state.queue.push({ key, sheet: state.plan.sheet, week: week.n, day: day.n, session });
-    save(LS.queue, state.queue);
-    flushQueue().then(render);
+    enqueue({ key, sheet: state.plan.sheet, week: week.n, day: day.n, session: { ...session, timeCol: day.timeCol, rpeCol: day.rpeCol } });
   }
 
   async function flushQueue() {
@@ -316,6 +397,53 @@
   window.addEventListener('online', () => flushQueue().then(render));
 
   // ---------------------------------------------------------------------------
+  // História cvikov (aktuálny blok + staršie bloky)
+  // ---------------------------------------------------------------------------
+  function allEntries() {
+    const out = [];
+    state.history.sheets.forEach((s, si) => {
+      for (const w of s.weeks) for (const d of w.days) for (const e of d.exercises) {
+        out.push({ sheet: s.name, order: si, week: w.n, day: d.n, date: d.date, name: e.name, planned: e.planned, done: e.done });
+      }
+    });
+    for (const w of state.plan.weeks) for (const d of w.days) for (const e of d.exercises) {
+      out.push({ sheet: state.plan.sheet, order: 999, week: w.n, day: d.n, date: d.date, name: e.name, planned: e.planned, done: getDone(w, d, e), current: true });
+    }
+    const key = (x) => `${x.date || '0000-00-00'}|${pad(x.order).padStart(3, '0')}|${pad(x.week)}|${pad(x.day)}`;
+    out.forEach((x) => { x.key = key(x); });
+    out.sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+    return out;
+  }
+
+  function findLast(week, day, ex) {
+    const target = nameKey(ex.name);
+    const here = `${day.date || '0000-00-00'}|999|${pad(week.n)}|${pad(day.n)}`;
+    const list = allEntries().filter((x) => nameKey(x.name) === target && hasAny(x.done) && x.key < here);
+    return list[list.length - 1] || null;
+  }
+
+  function lastLabel(entry) {
+    if (entry.current) return `T${entry.week}`;
+    return entry.date ? formatDate(entry.date, false) : `T${entry.week}`;
+  }
+
+  // Séria hodnôt pre graf jednej časti cviku (pri supersete každá časť zvlášť).
+  function progressSeries(part) {
+    const target = matchKey(part);
+    const points = [];
+    for (const x of allEntries()) {
+      const parts = splitParts(x.name).map(matchKey);
+      const pi = parts.indexOf(target);
+      if (pi < 0) continue;
+      const w = weightParts(x.done.weight);
+      const val = w.length === 1 && parts.length > 1 ? (pi === 0 ? w[0] : null) : w[pi];
+      if (val == null || !(val > 0)) continue;
+      points.push({ date: x.date, week: x.week, sheet: x.sheet, value: val, done: x.done, current: x.current });
+    }
+    return points;
+  }
+
+  // ---------------------------------------------------------------------------
   // Výber týždňa / dňa
   // ---------------------------------------------------------------------------
   function defaultWeekIdx() {
@@ -323,7 +451,6 @@
     const today = todayIso();
     const idx = weeks.findIndex((w) => w.days.some((d) => d.date === today));
     if (idx >= 0) return idx;
-    // Inak posledný týždeň, v ktorom je niečo naplánované.
     for (let i = weeks.length - 1; i >= 0; i--) {
       if (weeks[i].days.some((d) => d.exercises.length)) return i;
     }
@@ -336,20 +463,18 @@
     return state.plan.weeks[state.view.weekIdx];
   }
 
-  function findLast(weekIdx, dayN, ex) {
-    const target = norm(ex.name);
-    const weeks = state.plan.weeks;
-    for (let wi = weekIdx; wi >= 0; wi--) {
-      const w = weeks[wi];
-      const days = w.days.slice().reverse();
-      for (const d of days) {
-        if (wi === weekIdx && d.n >= dayN) continue;
-        for (const e of d.exercises) {
-          if (norm(e.name) !== target) continue;
-          const done = getDone(w, d, e);
-          if (hasAny(done)) return { week: w, day: d, done, planned: e.planned };
-        }
-      }
+  function findDay() {
+    const week = currentWeek();
+    const day = week && week.days.find((d) => d.n === state.view.dayN);
+    return { week, day };
+  }
+
+  function nextOpenEx(week, day, afterIdx) {
+    const list = day.exercises;
+    const start = afterIdx == null ? 0 : list.findIndex((e) => e.idx === afterIdx) + 1;
+    for (let i = 0; i < list.length; i++) {
+      const e = list[(start + i) % list.length];
+      if (!hasAny(getDone(week, day, e))) return e.idx;
     }
     return null;
   }
@@ -362,8 +487,11 @@
     back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>',
     next: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>',
     refresh: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg>',
-    timer: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2M9 2h6"/></svg>',
     check: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>',
+    checkBig: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>',
+    chart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/></svg>',
+    close: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+    up: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>',
   };
 
   // ---------------------------------------------------------------------------
@@ -372,10 +500,12 @@
   const app = document.getElementById('app');
 
   function render() {
-    // Zachovaj rozpísané hodnoty a fokus, aby sa pri prekreslení nestratili.
     const drafts = collectDrafts();
     const focused = document.activeElement && document.activeElement.id;
     const scroll = window.scrollY;
+    const oldSheet = app.querySelector('.sheet');
+    const sheetScroll = oldSheet ? oldSheet.scrollTop : 0;
+    const sameSheet = Boolean(oldSheet) && render.lastSheet === state.sheetOpen;
 
     let html;
     if (state.view.name === 'settings' || !isConfigured()) html = renderSettings();
@@ -383,7 +513,14 @@
     else if (state.view.name === 'workout') html = renderWorkout();
     else html = renderWeek();
 
-    app.innerHTML = html + renderFab() + renderSheet();
+    app.innerHTML = html + renderSheet();
+    render.lastSheet = state.sheetOpen;
+    document.body.classList.toggle('sheet-open', Boolean(state.sheetOpen));
+    const newSheet = app.querySelector('.sheet');
+    if (newSheet && sameSheet) {
+      newSheet.classList.add('no-anim');
+      newSheet.scrollTop = sheetScroll;
+    }
     restoreDrafts(drafts);
     if (focused) {
       const el = document.getElementById(focused);
@@ -422,6 +559,7 @@
     return `<div class="empty"><div class="spinner"></div>Načítavam plán od trénera…</div>`;
   }
 
+  // ----- Týždeň -----
   function renderWeek() {
     const week = currentWeek();
     const weeks = state.plan.weeks;
@@ -440,13 +578,15 @@
       const total = d.exercises.length;
       const allDone = doneCount === total;
       const C = 2 * Math.PI * 15;
-      const ring = `<svg class="ring" viewBox="0 0 36 36"><circle class="bg" cx="18" cy="18" r="15"/><circle class="fg" cx="18" cy="18" r="15" transform="rotate(-90 18 18)" stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - doneCount / total)}"/></svg>`;
-      const preview = d.exercises.map((e) => e.name.split('+')[0].trim().toLowerCase()).slice(0, 3).join(' · ');
+      const ring = allDone ? '' : `<svg class="ring" viewBox="0 0 36 36" aria-label="${doneCount} z ${total}"><circle class="bg" cx="18" cy="18" r="15"/><circle class="fg" cx="18" cy="18" r="15" transform="rotate(-90 18 18)" stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - doneCount / total)}"/></svg>`;
+      const preview = d.exercises.map((e) => splitParts(e.name)[0].toLowerCase()).slice(0, 3).join(' · ');
+      const s = state.sessions[dayKey(week.n, d.n)];
+      const mins = s && s.minutes ? `${s.minutes} min` : d.time;
       return `<button class="day ${isToday ? 'today' : ''} ${allDone ? 'done' : ''}" data-action="open-day" data-day="${d.n}">
-        <div class="num">${allDone ? ICON.check.replace('14', '22').replace('14', '22') : d.n}</div>
+        <div class="num">${allDone ? ICON.checkBig : d.n}</div>
         <div class="info">
           <div class="title">Deň ${d.n} <span style="color:var(--muted);font-weight:500">${esc(formatDate(d.date))}</span> ${isToday ? '<span class="badge">Dnes</span>' : ''}</div>
-          <div class="meta">${total} cvikov · ${esc(preview)}</div>
+          <div class="meta">${allDone ? `Hotovo${mins ? ' · ' + esc(mins) : ''}` : `${total} cvikov · ${esc(preview)}`}</div>
         </div>
         ${ring}
       </button>`;
@@ -468,42 +608,68 @@
       <div class="days">${days}</div>`;
   }
 
-  function findDay() {
-    const week = currentWeek();
-    const day = week && week.days.find((d) => d.n === state.view.dayN);
-    return { week, day };
-  }
-
+  // ----- Tréning (po jednom cviku) -----
   function renderWorkout() {
     const { week, day } = findDay();
     if (!day) { state.view.name = 'week'; return renderWeek(); }
-    const dk = dayKey(week.n, day.n);
-    const session = state.sessions[dk] || {};
     const doneCount = day.exercises.filter((e) => hasAny(getDone(week, day, e))).length;
-    const pct = day.exercises.length ? (doneCount / day.exercises.length) * 100 : 0;
+    const total = day.exercises.length;
+    const open = state.view.openEx;
+    const session = state.sessions[dayKey(week.n, day.n)] || {};
+    const finished = Boolean(session.finishedAt) || Boolean(day.time);
 
-    let sessionHtml;
-    if (session.startedAt && !session.finishedAt) {
-      sessionHtml = `<div class="session"><div class="clock"><span data-elapsed="${session.startedAt}">${fmtElapsed(Date.now() - session.startedAt)}</span><small>Trvanie tréningu</small></div><button class="btn small" data-action="finish">Dokončiť</button></div>`;
-    } else if (session.finishedAt || day.time) {
-      const mins = session.finishedAt ? Math.round((session.finishedAt - session.startedAt) / 60000) + ' min' : day.time;
-      sessionHtml = `<div class="session"><div class="clock">${esc(mins)}<small>Hotovo${day.seshDone || session.rpe ? ' · RPE tréningu ' + esc(session.rpe || day.seshDone) : ''}</small></div><button class="btn small ghost" data-action="finish">Upraviť</button></div>`;
-    } else {
-      sessionHtml = `<div class="session"><div class="clock">0:00<small>Stopky tréningu</small></div><button class="btn small" data-action="start">Začať tréning</button></div>`;
+    const stepper = day.exercises.map((e, i) => {
+      const isDone = hasAny(getDone(week, day, e));
+      return `<button class="step ${isDone ? 'done' : ''} ${e.idx === open ? 'on' : ''}" data-action="open-ex" data-ex="${e.idx}" aria-label="Cvik ${i + 1}">${isDone ? ICON.check : i + 1}</button>`;
+    }).join('<span class="step-line"></span>');
+
+    const list = day.exercises.map((ex, i) => (ex.idx === open ? renderExercise(week, day, ex, i) : renderExerciseRow(week, day, ex, i))).join('');
+
+    let footer = '';
+    if (finished) {
+      const mins = session.minutes ? `${session.minutes} min` : day.time;
+      const rpe = session.rpe || day.seshDone;
+      footer = `<div class="finished"><div><b>Tréning hotový</b><span>${esc([mins, rpe ? 'RPE ' + rpe : ''].filter(Boolean).join(' · '))}</span></div><button class="btn small ghost" data-action="summary">Súhrn</button></div>`;
+    } else if (doneCount > 0) {
+      footer = `<button class="btn ${doneCount === total ? '' : 'ghost'} finish" data-action="summary">Dokončiť tréning</button>`;
     }
-
-    const exHtml = day.exercises.map((ex, i) => renderExercise(week, day, ex, i)).join('');
 
     return `
       <div class="topbar">
         <button class="icon-btn" data-action="back" aria-label="Späť">${ICON.back}</button>
-        <h1>Deň ${day.n}<span class="sub">Týždeň ${week.n} · ${esc(formatDate(day.date))} · ${doneCount}/${day.exercises.length} hotovo</span></h1>
+        <h1>Deň ${day.n}<span class="sub">Týždeň ${week.n} · ${esc(formatDate(day.date))} · ${doneCount}/${total} hotovo</span></h1>
       </div>
-      <div class="progress"><div style="width:${pct}%"></div></div>
       ${renderBanners()}
-      ${sessionHtml}
+      <div class="stepper">${stepper}</div>
       ${day.note ? `<div class="day-note">${esc(day.note)}</div>` : ''}
-      ${exHtml}`;
+      ${list}
+      ${footer}`;
+  }
+
+  function exNameHtml(name) {
+    const parts = splitParts(name);
+    return parts.length > 1
+      ? `<span class="ex-tag">Superset</span>` + parts.map((p) => `<span class="part">${esc(cap(p))}</span>`).join('<span class="plus">+</span>')
+      : esc(cap(name));
+  }
+
+  function renderExerciseRow(week, day, ex, i) {
+    const done = getDone(week, day, ex);
+    const isDone = hasAny(done);
+    const local = state.local[exKey(week.n, day.n, ex.idx)];
+    const pending = local && local.status === 'pending';
+    const err = local && local.status === 'error';
+    const detail = isDone
+      ? doneSummary(done)
+      : [prettySets(ex.planned.sets), prettyWeight(ex.planned.weight)].filter((x) => x !== '–').join(' · ');
+    return `<button class="ex-row ${isDone ? 'is-done' : ''}" id="ex-${week.n}-${day.n}-${ex.idx}" data-action="open-ex" data-ex="${ex.idx}">
+      <div class="ex-idx">${isDone ? ICON.check : i + 1}</div>
+      <div class="ex-row-main">
+        <div class="ex-row-name">${esc(splitParts(ex.name).map(cap).join(' + '))}</div>
+        <div class="ex-row-detail ${err ? 'err' : ''}">${err ? 'Neuložené – ťukni a skús znova' : esc(detail)}${pending ? ' · odosielam…' : ''}</div>
+      </div>
+      ${ICON.next}
+    </button>`;
   }
 
   function renderExercise(week, day, ex, i) {
@@ -511,15 +677,11 @@
     const done = getDone(week, day, ex);
     const local = state.local[exKey(week.n, day.n, ex.idx)];
     const isDone = hasAny(done);
-    const parts = ex.name.split(/\s+\+\s+/);
-    const nameHtml = parts.length > 1
-      ? `<span class="ex-tag">Superset</span>` + parts.map((p) => `<span class="part">${esc(cap(p))}</span>`).join('<span class="plus">+</span>')
-      : esc(cap(ex.name));
+    const isSuperset = splitParts(ex.name).length > 1;
 
-    const wi = state.plan.weeks.indexOf(week);
-    const last = findLast(wi, day.n, ex);
+    const last = findLast(week, day, ex);
     const lastHtml = last
-      ? `<div class="last">Minule (T${last.week.n}): <b>${esc([last.done.sets && last.done.sets !== 'Ok' ? prettySets(last.done.sets) : '', last.done.weight ? prettyWeight(last.done.weight) : '', last.done.rpe ? 'RPE ' + last.done.rpe : ''].filter(Boolean).join(' · ') || 'splnené')}</b>${last.done.note ? ' – ' + esc(last.done.note) : ''}</div>`
+      ? `<div class="last">Minule (${esc(lastLabel(last))}): <b>${esc(doneSummary(last.done) || 'splnené')}</b>${last.done.note ? ' – ' + esc(last.done.note) : ''}</div>`
       : '';
 
     let status = '';
@@ -536,13 +698,16 @@
       status = `<span class="status ok">${ICON.check}V tabuľke</span>`;
     }
 
-    const rpeChips = RPE_VALUES.map((v) => `<button class="chip ${String(done.rpe) === v ? 'on' : ''}" data-action="rpe" data-target="rpe-${id}" data-value="${v}">${v}</button>`).join('');
+    const rpeVals = String(done.rpe || '').split(/\s+a\s+/).map((s) => s.trim());
+    const rpeChips = RPE_VALUES.map((v) => `<button class="chip ${rpeVals.includes(v) ? 'on' : ''}" data-action="rpe" data-target="rpe-${id}" data-value="${v}" data-multi="${isSuperset ? 1 : 0}">${v}</button>`).join('');
+    const hasHistory = splitParts(ex.name).some((p) => progressSeries(p).length > 0);
 
     return `
-      <section class="ex ${isDone ? 'is-done' : ''}" id="ex-${id}">
+      <section class="ex open ${isDone ? 'is-done' : ''}" id="ex-${id}">
         <div class="ex-head">
           <div class="ex-idx">${isDone ? ICON.check : i + 1}</div>
-          <div class="ex-name">${nameHtml}</div>
+          <div class="ex-name">${exNameHtml(ex.name)}</div>
+          ${hasHistory ? `<button class="icon-btn small" data-action="progress" data-name="${esc(ex.name)}" aria-label="Graf progresu">${ICON.chart}</button>` : ''}
         </div>
         <div class="plan">
           <div class="cell"><div class="k">Série</div><div class="v">${esc(prettySets(ex.planned.sets))}</div></div>
@@ -556,45 +721,163 @@
             <div class="field">
               <label for="sets-${id}">Série × opak.</label>
               <div class="with-btn">
-                <input id="sets-${id}" data-draft value="${esc(done.sets)}" placeholder="${esc(ex.planned.sets || '2x8')}" autocomplete="off" enterkeyhint="next">
+                <input id="sets-${id}" data-draft value="${esc(done.sets)}" placeholder="${esc(ex.planned.sets || '2x8')}" autocomplete="off" autocorrect="off" enterkeyhint="next">
                 <button class="mini" data-action="ok" data-target="sets-${id}" aria-label="Podľa plánu">Ok</button>
               </div>
             </div>
             <div class="field">
               <label for="weight-${id}">Váha (kg)</label>
-              <input id="weight-${id}" data-draft value="${esc(done.weight)}" placeholder="${esc(/choose/i.test(ex.planned.weight) ? (last && last.done.weight) || 'kg' : ex.planned.weight || 'kg')}" inputmode="decimal" autocomplete="off" enterkeyhint="next">
+              <input id="weight-${id}" data-draft value="${esc(done.weight)}" placeholder="${esc(/choose/i.test(ex.planned.weight) ? (last && last.done.weight) || 'kg' : ex.planned.weight || 'kg')}" ${isSuperset ? '' : 'inputmode="decimal"'} autocomplete="off" autocorrect="off" enterkeyhint="next">
             </div>
           </div>
           <div class="field">
-            <label for="rpe-${id}">RPE</label>
-            <input id="rpe-${id}" data-draft type="hidden" value="${esc(done.rpe)}">
-            <div class="chips" role="group" aria-label="RPE">${rpeChips}</div>
+            <label for="rpe-${id}">RPE${isSuperset ? ' <span class="lbl-hint">pri supersete napr. „8 a 7“</span>' : ''}</label>
+            <input id="rpe-${id}" data-draft value="${esc(done.rpe)}" placeholder="${esc(ex.planned.rpe || '')}" ${isSuperset ? '' : 'inputmode="decimal"'} autocomplete="off" autocorrect="off">
+            <div class="chips" role="group" aria-label="Rýchly výber RPE">${rpeChips}</div>
           </div>
           <div class="field">
             <label for="note-${id}">Poznámka pre trénera</label>
             <textarea id="note-${id}" data-draft rows="1" placeholder="Ako to išlo?">${esc(done.note)}</textarea>
           </div>
           <div class="actions">
-            <button class="btn" data-action="save-ex" data-ex="${ex.idx}" data-id="${id}">${isDone ? 'Uložiť zmeny' : 'Uložiť'}</button>
+            <button class="btn" data-action="save-ex" data-ex="${ex.idx}" data-id="${id}">${isDone ? 'Uložiť zmeny' : 'Uložiť a ďalej'}</button>
             ${status}
           </div>
         </div>
       </section>`;
   }
 
-  function cap(s) {
-    const t = String(s || '').trim().toLowerCase();
-    return t.charAt(0).toUpperCase() + t.slice(1);
+  // ----- Súhrn tréningu -----
+  function summaryData(week, day) {
+    const rows = day.exercises.map((ex) => {
+      const done = getDone(week, day, ex);
+      const last = findLast(week, day, ex);
+      const now = weightParts(done.weight);
+      const before = last ? weightParts(last.done.weight) : [];
+      const parts = splitParts(ex.name);
+      const gains = [];
+      now.forEach((v, i) => {
+        const b = before[i];
+        if (v != null && b != null && v > b) gains.push({ part: parts[i] || parts[0], from: b, to: v, diff: v - b });
+      });
+      return { ex, done, last, isDone: hasAny(done), gains };
+    });
+    return { rows, done: rows.filter((r) => r.isDone).length, gains: rows.flatMap((r) => r.gains) };
   }
 
-  function fmtElapsed(ms) {
-    const s = Math.max(0, Math.floor(ms / 1000));
-    const h = Math.floor(s / 3600);
-    const m = Math.floor((s % 3600) / 60);
-    const sec = s % 60;
-    return h ? `${h}:${pad(m)}:${pad(sec)}` : `${m}:${pad(sec)}`;
+  function renderSummary() {
+    const { week, day } = findDay();
+    if (!day) return '';
+    const s = state.sessions[dayKey(week.n, day.n)] || {};
+    const data = summaryData(week, day);
+    const autoMins = s.startedAt ? Math.max(1, Math.round((Date.now() - s.startedAt) / 60000)) : '';
+    const mins = s.minutes || String(day.time).replace(/\D+/g, '') || autoMins;
+    const rpe = s.rpe || day.seshDone || '';
+
+    const gains = data.gains.length
+      ? `<div class="section-title">Zlepšenia oproti minule</div><div class="gains">${data.gains.map((g) => `
+          <div class="gain"><span class="gain-name">${esc(cap(g.part))}</span><span class="gain-val">${fmtKg(g.from)} → <b>${fmtKg(g.to)} kg</b></span><span class="gain-diff">${ICON.up}${fmtKg(g.diff)}</span></div>`).join('')}</div>`
+      : '';
+
+    const list = data.rows.map((r) => `
+      <div class="sum-row ${r.isDone ? '' : 'skipped'}">
+        <div class="sum-name">${esc(splitParts(r.ex.name).map(cap).join(' + '))}</div>
+        <div class="sum-val">${r.isDone ? esc(doneSummary(r.done)) : 'nevyplnené'}</div>
+        ${r.last ? `<div class="sum-last">minule ${esc(doneSummary(r.last.done))}</div>` : ''}
+      </div>`).join('');
+
+    return `<div class="sheet-backdrop" data-action="close-sheet"><div class="sheet" role="dialog" aria-label="Súhrn tréningu">
+      <div class="grab"></div>
+      <div class="sheet-head"><h2>Tréning hotový 💪</h2><button class="icon-btn" data-action="close-sheet" aria-label="Zavrieť">${ICON.close}</button></div>
+      <p>Týždeň ${week.n} · Deň ${day.n} · ${esc(formatDate(day.date))}</p>
+      <div class="tiles">
+        <div class="tile"><div class="tile-v">${data.done}<small>/${day.exercises.length}</small></div><div class="tile-k">cvikov</div></div>
+        <div class="tile"><div class="tile-v">${data.gains.length}</div><div class="tile-k">zlepšení</div></div>
+        <div class="tile"><div class="tile-v">${mins || '–'}<small>${mins ? ' min' : ''}</small></div><div class="tile-k">trvanie</div></div>
+      </div>
+      ${gains}
+      <div class="section-title">Prehľad</div>
+      <div class="sum-list">${list}</div>
+      <div class="form" style="margin-top:18px">
+        <div class="field"><label for="fin-time">Trvanie (min)</label><input id="fin-time" inputmode="numeric" value="${esc(mins)}"></div>
+        <div class="field"><label for="fin-rpe">Náročnosť celého tréningu (RPE)</label>
+          <input id="fin-rpe" type="hidden" value="${esc(rpe)}">
+          <div class="chips">${['5', '6', '7', '8', '9', '10'].map((v) => `<button class="chip ${rpe === v ? 'on' : ''}" data-action="rpe" data-target="fin-rpe" data-value="${v}" data-multi="0">${v}</button>`).join('')}</div>
+        </div>
+        <button class="btn" data-action="finish-save">Uložiť tréning</button>
+      </div>
+    </div></div>`;
   }
 
+  // ----- Graf progresu -----
+  function renderProgress() {
+    const name = state.progress.name;
+    const parts = splitParts(name);
+    const charts = parts.map((p, pi) => {
+      const pts = progressSeries(p);
+      return `<div class="chart-block">
+        ${parts.length > 1 ? `<div class="chart-title">${esc(cap(p))}</div>` : ''}
+        ${pts.length ? chartSvg(pts, pi) : '<div class="hint">Zatiaľ žiadne zapísané váhy.</div>'}
+        ${pts.length ? progressTable(pts) : ''}
+      </div>`;
+    }).join('');
+    return `<div class="sheet-backdrop" data-action="close-sheet"><div class="sheet" role="dialog" aria-label="Progres cviku">
+      <div class="grab"></div>
+      <div class="sheet-head"><h2>Progres</h2><button class="icon-btn" data-action="close-sheet" aria-label="Zavrieť">${ICON.close}</button></div>
+      <p>${esc(parts.map(cap).join(' + '))} · váha v kg</p>
+      ${charts}
+    </div></div>`;
+  }
+
+  function chartSvg(pts, pi) {
+    const W = 340, H = 180, L = 34, R = 14, T = 22, B = 26;
+    const vals = pts.map((p) => p.value);
+    let min = Math.min(...vals), max = Math.max(...vals);
+    if (min === max) { min -= 5; max += 5; }
+    const padV = (max - min) * 0.15;
+    min = Math.max(0, min - padV); max += padV;
+    const step = niceStep((max - min) / 3);
+    const lo = Math.floor(min / step) * step, hi = Math.ceil(max / step) * step;
+    const x = (i) => (pts.length === 1 ? (L + W - R) / 2 : L + (i * (W - L - R)) / (pts.length - 1));
+    const y = (v) => T + (1 - (v - lo) / (hi - lo)) * (H - T - B);
+    const grid = [];
+    for (let v = lo; v <= hi + 1e-9; v += step) {
+      grid.push(`<line class="grid" x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}"/><text class="axis" x="${L - 6}" y="${y(v) + 4}" text-anchor="end">${fmtKg(v)}</text>`);
+    }
+    const path = pts.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p.value).toFixed(1)}`).join(' ');
+    const sel = state.progress.sel && state.progress.sel.pi === pi ? state.progress.sel.i : pts.length - 1;
+    const dots = pts.map((p, i) => `
+      <g class="pt ${i === sel ? 'sel' : ''}" data-action="chart-pt" data-pi="${pi}" data-i="${i}">
+        <circle class="hit" cx="${x(i)}" cy="${y(p.value)}" r="16"/>
+        <circle class="dot" cx="${x(i)}" cy="${y(p.value)}" r="${i === sel ? 6 : 4.5}"/>
+      </g>`).join('');
+    const sp = pts[sel];
+    const label = `${fmtKg(sp.value)} kg · ${sp.date ? formatDate(sp.date, false) : 'T' + sp.week}`;
+    const lx = Math.min(Math.max(x(sel), L + 50), W - R - 50);
+    const xLabels = [0, pts.length - 1].filter((v, i, a) => a.indexOf(v) === i).map((i) =>
+      `<text class="axis" x="${x(i)}" y="${H - 6}" text-anchor="${pts.length === 1 ? 'middle' : i === 0 ? 'start' : 'end'}">${esc(pts[i].date ? formatDate(pts[i].date, false) : 'T' + pts[i].week)}</text>`).join('');
+    return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Graf váhy">
+      ${grid.join('')}
+      <path class="line" d="${path}"/>
+      ${dots}
+      <text class="tip" x="${lx}" y="${Math.max(14, y(sp.value) - 12)}" text-anchor="middle">${esc(label)}</text>
+      ${xLabels}
+    </svg>`;
+  }
+
+  function niceStep(raw) {
+    const p = Math.pow(10, Math.floor(Math.log10(raw || 1)));
+    const n = raw / p;
+    return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 2.5 ? 2.5 : n <= 5 ? 5 : 10) * p;
+  }
+
+  function progressTable(pts) {
+    const rows = pts.slice().reverse().slice(0, 12).map((p) => `
+      <tr><td>${esc(p.date ? formatDate(p.date, false) : 'T' + p.week)}</td><td>${esc(p.done.sets === 'Ok' ? 'Ok' : prettySets(p.done.sets))}</td><td><b>${fmtKg(p.value)}</b></td><td>${esc(p.done.rpe || '–')}</td></tr>`).join('');
+    return `<table class="ptable"><thead><tr><th>Dátum</th><th>Série</th><th>kg</th><th>RPE</th></tr></thead><tbody>${rows}</tbody></table>`;
+  }
+
+  // ----- Nastavenia -----
   function renderSettings() {
     const c = state.config;
     const sheetUrl = c.sheetId ? `https://docs.google.com/spreadsheets/d/${c.sheetId}/edit${c.gid ? '#gid=' + c.gid : ''}` : '';
@@ -615,7 +898,7 @@
           <div class="field">
             <label for="cfg-sheet">Názov hárku (záložky)</label>
             <input id="cfg-sheet" name="sheet" value="${esc(c.sheetName)}" placeholder="napr. COMEBACK NOV">
-            <div class="hint">Záložka s aktuálnym plánom. Keď tréner začne nový blok, zmeň ju tu. So zapnutým zápisom (nižšie) sa nájde sama.</div>
+            <div class="hint">So zapnutým zápisom (nižšie) môže ostať prázdne – aktuálny hárok sa nájde sám.</div>
           </div>
         </div>
 
@@ -637,45 +920,9 @@
       </form>`;
   }
 
-  function renderFab() {
-    if (!state.plan || state.view.name !== 'workout') return '';
-    const left = state.rest.endsAt - Date.now();
-    if (left > 0) return `<button class="fab running" data-action="rest" id="fab">${ICON.timer}<span data-rest>${fmtElapsed(left + 999)}</span></button>`;
-    if (state.rest.alarm) return `<button class="fab running alarm" data-action="rest-stop" id="fab">${ICON.timer}Pauza skončila</button>`;
-    return `<button class="fab" data-action="rest" id="fab">${ICON.timer}Pauza</button>`;
-  }
-
   function renderSheet() {
-    if (state.sheetOpen === 'rest') {
-      const left = state.rest.endsAt - Date.now();
-      const running = left > 0;
-      return `<div class="sheet-backdrop" data-action="close-sheet"><div class="sheet" role="dialog" aria-label="Časovač pauzy">
-        <div class="grab"></div>
-        <h2>Pauza medzi sériami</h2>
-        <div class="big-clock" data-rest>${running ? fmtElapsed(left + 999) : fmtElapsed(state.rest.last * 1000)}</div>
-        ${running ? `<div class="actions" style="margin-bottom:14px"><button class="btn ghost" data-action="rest-add" data-value="-15">−15 s</button><button class="btn ghost" data-action="rest-add" data-value="15">+15 s</button></div><button class="btn" data-action="rest-stop">Zastaviť</button>` : `
-        <div class="presets">${REST_PRESETS.map((s) => `<button class="preset" data-action="rest-start" data-value="${s}">${fmtElapsed(s * 1000)}</button>`).join('')}</div>`}
-      </div></div>`;
-    }
-    if (state.sheetOpen === 'finish') {
-      const { week, day } = findDay();
-      const dk = dayKey(week.n, day.n);
-      const s = state.sessions[dk] || {};
-      const mins = s.startedAt ? Math.max(1, Math.round(((s.finishedAt || Date.now()) - s.startedAt) / 60000)) : '';
-      return `<div class="sheet-backdrop" data-action="close-sheet"><div class="sheet" role="dialog" aria-label="Dokončiť tréning">
-        <div class="grab"></div>
-        <h2>Dokončiť tréning</h2>
-        <p>Zapíše sa do stĺpcov WORKOUT TIME a SESH RPE (executed).</p>
-        <div class="form">
-          <div class="field"><label for="fin-time">Trvanie (min)</label><input id="fin-time" inputmode="numeric" value="${esc(mins || String(day.time).replace(/\D+/g, ''))}"></div>
-          <div class="field"><label>Ako náročný bol celý tréning? (RPE)</label>
-            <input id="fin-rpe" type="hidden" value="${esc(s.rpe || day.seshDone)}">
-            <div class="chips">${['5', '6', '7', '8', '9', '10'].map((v) => `<button class="chip ${(s.rpe || day.seshDone) === v ? 'on' : ''}" data-action="rpe" data-target="fin-rpe" data-value="${v}">${v}</button>`).join('')}</div>
-          </div>
-          <button class="btn" data-action="finish-save">Uložiť tréning</button>
-        </div>
-      </div></div>`;
-    }
+    if (state.sheetOpen === 'summary') return renderSummary();
+    if (state.sheetOpen === 'progress' && state.progress) return renderProgress();
     return '';
   }
 
@@ -684,6 +931,10 @@
   // ---------------------------------------------------------------------------
   app.addEventListener('input', (e) => {
     if (e.target.matches('[data-draft]')) e.target.dataset.dirty = '1';
+    if (e.target.id && e.target.id.startsWith('rpe-')) {
+      const vals = e.target.value.split(/\s+a\s+/).map((s) => s.trim());
+      e.target.parentElement.querySelectorAll('.chip').forEach((c) => c.classList.toggle('on', vals.includes(c.dataset.value)));
+    }
   });
 
   app.addEventListener('submit', (e) => {
@@ -699,6 +950,8 @@
     state.config = { sheetId: id, gid, sheetName: f.sheet.value, scriptUrl, token: f.token.value.trim() };
     save(LS.config, state.config);
     state.plan = null;
+    state.history = { fetchedAt: 0, sheets: [] };
+    save(LS.history, state.history);
     state.view = { name: 'week', weekIdx: null };
     refresh();
   });
@@ -707,11 +960,18 @@
     const t = e.target.closest('[data-action]');
     if (!t) return;
     const action = t.dataset.action;
-    if (action === 'close-sheet' && t !== e.target) return; // klik dovnútra sheetu
-    handle(action, t, e);
+    if (action === 'close-sheet' && t.classList.contains('sheet-backdrop') && t !== e.target) return; // klik dovnútra sheetu
+    handle(action, t);
   });
 
-  function handle(action, t, e) {
+  function scrollToEx(week, day, idx) {
+    requestAnimationFrame(() => {
+      const el = document.getElementById(`ex-${week.n}-${day.n}-${idx}`);
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  }
+
+  function handle(action, t) {
     switch (action) {
       case 'refresh':
         refresh();
@@ -732,11 +992,22 @@
         state.view.weekIdx = Math.max(0, Math.min(state.plan.weeks.length - 1, state.view.weekIdx + Number(t.dataset.dir)));
         render();
         break;
-      case 'open-day':
+      case 'open-day': {
         state.view = { ...state.view, name: 'workout', dayN: Number(t.dataset.day) };
+        const { week, day } = findDay();
+        state.view.openEx = nextOpenEx(week, day, null);
         render();
         window.scrollTo(0, 0);
         break;
+      }
+      case 'open-ex': {
+        const idx = Number(t.dataset.ex);
+        const { week, day } = findDay();
+        state.view.openEx = state.view.openEx === idx && t.classList.contains('step') ? null : idx;
+        render();
+        if (state.view.openEx != null) scrollToEx(week, day, idx);
+        break;
+      }
       case 'ok': {
         const input = document.getElementById(t.dataset.target);
         input.value = 'Ok';
@@ -745,10 +1016,17 @@
       }
       case 'rpe': {
         const input = document.getElementById(t.dataset.target);
-        const same = input.value === t.dataset.value;
-        input.value = same ? '' : t.dataset.value;
+        const v = t.dataset.value;
+        let vals = input.value.split(/\s+a\s+/).map((s) => s.trim()).filter(Boolean);
+        if (t.dataset.multi === '1') {
+          // Superset: prvé ťuknutie = 1. cvik, druhé = 2. cvik („8 a 7“), tretie začne odznova.
+          vals = vals.length >= 2 ? [v] : vals.concat(v);
+        } else {
+          vals = vals.length === 1 && vals[0] === v ? [] : [v];
+        }
+        input.value = vals.join(' a ');
         input.dataset.dirty = '1';
-        t.parentElement.querySelectorAll('.chip').forEach((c) => c.classList.toggle('on', !same && c === t));
+        t.parentElement.querySelectorAll('.chip').forEach((c) => c.classList.toggle('on', vals.includes(c.dataset.value)));
         break;
       }
       case 'save-ex': {
@@ -759,22 +1037,22 @@
         const fields = { sets: val('sets'), weight: val('weight'), rpe: val('rpe'), note: val('note') };
         if (!hasAny(fields) && !fields.note) { toast('Najprv vyplň aspoň váhu alebo RPE'); return; }
         ['sets', 'weight', 'rpe', 'note'].forEach((k) => { delete document.getElementById(`${k}-${id}`).dataset.dirty; });
+        const dk = dayKey(week.n, day.n);
+        if (!state.sessions[dk]) {
+          state.sessions[dk] = { startedAt: Date.now() }; // trvanie tréningu sa počíta od prvého uloženého cviku
+          save(LS.sessions, state.sessions);
+        }
         saveExercise(week, day, ex, fields);
         if (navigator.vibrate) navigator.vibrate(30);
+        const next = nextOpenEx(week, day, ex.idx);
+        state.view.openEx = next;
+        if (next == null && !state.sessions[dk].finishedAt && !day.time) state.sheetOpen = 'summary';
         render();
-        // Ponúkni pauzu po uložení cviku.
-        if (!(state.rest.endsAt > Date.now())) startRest(state.rest.last || 90, true);
+        if (next != null) scrollToEx(week, day, next);
         break;
       }
-      case 'start': {
-        const { week, day } = findDay();
-        state.sessions[dayKey(week.n, day.n)] = { startedAt: Date.now() };
-        save(LS.sessions, state.sessions);
-        render();
-        break;
-      }
-      case 'finish':
-        state.sheetOpen = 'finish';
+      case 'summary':
+        state.sheetOpen = 'summary';
         render();
         break;
       case 'finish-save': {
@@ -783,9 +1061,9 @@
         const s = state.sessions[dk] || {};
         const mins = document.getElementById('fin-time').value.trim();
         const rpe = document.getElementById('fin-rpe').value.trim();
-        if (!s.startedAt) s.startedAt = Date.now() - (Number(mins) || 0) * 60000;
-        s.finishedAt = s.startedAt + (Number(mins) || 0) * 60000;
+        s.minutes = mins;
         s.rpe = rpe;
+        s.finishedAt = Date.now();
         state.sessions[dk] = s;
         save(LS.sessions, state.sessions);
         saveSession(week, day, { time: mins ? mins + ' min' : '', rpe });
@@ -794,27 +1072,13 @@
         render();
         break;
       }
-      case 'rest':
-        unlockAudio();
-        state.sheetOpen = 'rest';
+      case 'progress':
+        state.progress = { name: t.dataset.name, sel: null };
+        state.sheetOpen = 'progress';
         render();
         break;
-      case 'rest-start':
-        unlockAudio();
-        startRest(Number(t.dataset.value));
-        state.sheetOpen = null;
-        render();
-        break;
-      case 'rest-add':
-        state.rest.endsAt += Number(t.dataset.value) * 1000;
-        save(LS.rest, state.rest);
-        render();
-        break;
-      case 'rest-stop':
-        state.rest.endsAt = 0;
-        state.rest.alarm = false;
-        save(LS.rest, state.rest);
-        state.sheetOpen = null;
+      case 'chart-pt':
+        state.progress.sel = { pi: Number(t.dataset.pi), i: Number(t.dataset.i) };
         render();
         break;
       case 'close-sheet':
@@ -831,60 +1095,6 @@
       }
     }
   }
-
-  // ---------------------------------------------------------------------------
-  // Časovač pauzy
-  // ---------------------------------------------------------------------------
-  let audioCtx = null;
-  function unlockAudio() {
-    try {
-      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      if (audioCtx.state === 'suspended') audioCtx.resume();
-    } catch (_) { /* bez zvuku */ }
-  }
-  function beep() {
-    if (!audioCtx) return;
-    [0, 0.25, 0.5].forEach((delay) => {
-      const o = audioCtx.createOscillator();
-      const g = audioCtx.createGain();
-      o.frequency.value = 880;
-      g.gain.setValueAtTime(0.0001, audioCtx.currentTime + delay);
-      g.gain.exponentialRampToValueAtTime(0.4, audioCtx.currentTime + delay + 0.02);
-      g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + delay + 0.18);
-      o.connect(g).connect(audioCtx.destination);
-      o.start(audioCtx.currentTime + delay);
-      o.stop(audioCtx.currentTime + delay + 0.2);
-    });
-  }
-  function startRest(seconds, quiet) {
-    unlockAudio();
-    state.rest = { endsAt: Date.now() + seconds * 1000, duration: seconds, last: seconds, alarm: false };
-    save(LS.rest, state.rest);
-    if (!quiet) toast(`Pauza ${fmtElapsed(seconds * 1000)}`);
-    render();
-  }
-
-  setInterval(() => {
-    // Tick: stopky tréningu a odpočet pauzy bez prekresľovania celej stránky.
-    document.querySelectorAll('[data-elapsed]').forEach((el) => {
-      el.textContent = fmtElapsed(Date.now() - Number(el.dataset.elapsed));
-    });
-    if (state.rest.endsAt) {
-      const left = state.rest.endsAt - Date.now();
-      if (left > 0) {
-        document.querySelectorAll('[data-rest]').forEach((el) => { el.textContent = fmtElapsed(left + 999); });
-      } else {
-        state.rest.endsAt = 0;
-        state.rest.alarm = true;
-        save(LS.rest, state.rest);
-        beep();
-        if (navigator.vibrate) navigator.vibrate([300, 120, 300, 120, 300]);
-        if (state.sheetOpen === 'rest') state.sheetOpen = null;
-        render();
-        setTimeout(() => { if (state.rest.alarm) { state.rest.alarm = false; save(LS.rest, state.rest); render(); } }, 8000);
-      }
-    }
-  }, 500);
 
   // ---------------------------------------------------------------------------
   // Štart

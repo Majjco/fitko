@@ -36,7 +36,7 @@ function doGet(e) {
     if (!sheet) return json_({ ok: false, error: 'Nenašiel som tréningový hárok (bunka „WEEK 1“).' });
 
     const lastRow = sheet.getLastRow();
-    const range = sheet.getRange(1, 1, lastRow, LAST_COL);
+    const range = sheet.getRange(1, 1, lastRow, Math.max(LAST_COL, sheet.getLastColumn()));
     const display = range.getDisplayValues();
     const raw = sheet.getRange(1, 2, lastRow, 1).getValues(); // stĺpec B = dátumy
     const tz = ss.getSpreadsheetTimeZone();
@@ -50,11 +50,12 @@ function doGet(e) {
       rows.push({ r: i + 1, c: row });
     }
 
-    const planSheets = ss.getSheets()
-      .filter(function (s) { return !s.isSheetHidden(); })
+    // Ostatné hárky s plánom (aj skryté staršie bloky) – apka z nich kreslí graf progresu.
+    const history = ss.getSheets()
+      .filter(function (s) { return s.getSheetId() !== sheet.getSheetId() && looksLikePlan_(s); })
       .map(function (s) { return s.getName(); });
 
-    return json_({ ok: true, sheet: sheet.getName(), sheets: planSheets, rows: rows });
+    return json_({ ok: true, sheet: sheet.getName(), history: history, rows: rows });
   } catch (err) {
     return json_({ ok: false, error: String(err) });
   }
@@ -62,9 +63,9 @@ function doGet(e) {
 
 /**
  * Telo (JSON, posielané ako text/plain kvôli CORS):
- * { token, sheet, week, day, ex, name, fields: { sets, weight, rpe, note } }
+ * { token, sheet, week, day, ex, col, name, fields: { sets, weight, rpe, note } }
  * alebo pre celý tréning:
- * { token, sheet, week, day, session: { time, rpe } }
+ * { token, sheet, week, day, session: { time, rpe, timeCol, rpeCol } }
  */
 function doPost(e) {
   const lock = LockService.getScriptLock();
@@ -81,14 +82,21 @@ function doPost(e) {
     if (!row) return json_({ ok: false, error: 'Týždeň ' + body.week + ' / deň ' + body.day + ' sa v tabuľke nenašiel' });
 
     if (body.session) {
-      if (body.session.time != null) sheet.getRange(row, COL_WORKOUT_TIME).setValue(String(body.session.time));
-      if (body.session.rpe != null) sheet.getRange(row, COL_SESSION_RPE_DONE).setValue(String(body.session.rpe));
+      const timeCol = Number(body.session.timeCol) || COL_WORKOUT_TIME;
+      const rpeCol = Number(body.session.rpeCol) || COL_SESSION_RPE_DONE;
+      if (body.session.time != null) sheet.getRange(row, timeCol).setValue(String(body.session.time));
+      if (body.session.rpe != null) sheet.getRange(row, rpeCol).setValue(String(body.session.rpe));
       return json_({ ok: true, row: row });
     }
 
-    const ex = Number(body.ex);
-    if (!(ex >= 0 && ex < EX_COUNT)) return json_({ ok: false, error: 'Zlé číslo cviku' });
-    const baseCol = FIRST_EX_COL + ex * EX_WIDTH;
+    // Apka posiela stĺpec názvu cviku (zistený z hlavičky „EXERCISE n“);
+    // starší spôsob – poradové číslo cviku – ostáva ako záloha.
+    let baseCol = Number(body.col);
+    if (!(baseCol >= 1)) {
+      const ex = Number(body.ex);
+      if (!(ex >= 0 && ex < EX_COUNT)) return json_({ ok: false, error: 'Zlé číslo cviku' });
+      baseCol = FIRST_EX_COL + ex * EX_WIDTH;
+    }
 
     // Poistka: ak tréner medzičasom zmenil cvik, nič neprepíšeme.
     const currentName = sheet.getRange(row, baseCol).getDisplayValue();
@@ -120,11 +128,15 @@ function findPlanSheet_(ss, name) {
   const sheets = ss.getSheets();
   for (let i = 0; i < sheets.length; i++) {
     const s = sheets[i];
-    if (s.isSheetHidden()) continue;
-    const head = s.getRange('A1:A10').getDisplayValues().map(function (r) { return r[0]; }).join('|');
-    if (/WEEK\s*1\b/i.test(head)) return s;
+    if (!s.isSheetHidden() && looksLikePlan_(s)) return s;
   }
   return null;
+}
+
+function looksLikePlan_(s) {
+  if (s.getLastRow() < 3) return false;
+  const head = s.getRange('A1:A10').getDisplayValues().map(function (r) { return r[0]; }).join('|');
+  return /WEEK\s*1\b/i.test(head);
 }
 
 function findDayRow_(sheet, week, day) {
