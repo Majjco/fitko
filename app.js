@@ -30,6 +30,8 @@
     view: { name: 'week', weekIdx: null, dayN: null, openEx: null },
     sheetOpen: null, // 'summary' | 'progress' | null
     progress: null, // { name, sel }
+    photoDrafts: [], // { id, blob, url, status: 'ready'|'uploading'|'done'|'error', error }
+    uploading: false,
     loading: false,
     error: null,
     flushing: false,
@@ -176,7 +178,7 @@
     const c = state.config;
     if (hasWrite()) {
       const data = await scriptGet({ sheet: c.sheetName });
-      return { sheet: data.sheet, rows: data.rows.map((r) => r.c), source: 'script', history: data.history || null, weights: Array.isArray(data.weights) ? data.weights : null };
+      return { sheet: data.sheet, rows: data.rows.map((r) => r.c), source: 'script', history: data.history || null, weights: Array.isArray(data.weights) ? data.weights : null, photos: data.photos || null };
     }
     if (!c.sheetId) throw new Error('Chýba odkaz na tabuľku');
     const names = c.sheetName ? [c.sheetName, c.sheetName + ' ', c.sheetName.trim()] : [''];
@@ -293,7 +295,7 @@
       const grid = await fetchGrid();
       const weeks = parsePlan(grid.rows);
       if (!weeks.length) throw new Error('Plán je prázdny – nenašiel som žiadny „WEEK“ blok');
-      state.plan = { v2: true, sheet: grid.sheet, weeks, fetchedAt: Date.now(), source: grid.source, history: grid.history, weights: grid.weights || null };
+      state.plan = { v2: true, sheet: grid.sheet, weeks, fetchedAt: Date.now(), source: grid.source, history: grid.history, weights: grid.weights || null, photos: grid.photos || null };
       save(LS.plan, state.plan);
       // Hodnoty, ktoré už sú v tabuľke, netreba držať lokálne.
       for (const [k, e] of Object.entries(state.local)) {
@@ -520,6 +522,8 @@
     checkBig: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>',
     chart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/></svg>',
     close: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+    camera: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.5"/></svg>',
+    image: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/></svg>',
     up: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>',
   };
 
@@ -630,19 +634,21 @@
       ${renderBanners()}
       ${!hasWrite() ? `<div class="banner"><div style="flex:1">Režim <b>len na čítanie</b> – výsledky sa ukladajú iba v telefóne.</div><button data-action="settings">Zapnúť zápis</button></div>` : ''}
       ${renderWeightCard()}
+      ${renderPhotoCard()}
       <div class="weekbar">
         <button class="icon-btn" data-action="week" data-dir="-1" ${wi <= 0 ? 'disabled' : ''} aria-label="Predchádzajúci týždeň">${ICON.back}</button>
         <div class="label">Týždeň ${week.n}<small>${esc(range)}</small></div>
         <button class="icon-btn" data-action="week" data-dir="1" ${wi >= weeks.length - 1 ? 'disabled' : ''} aria-label="Ďalší týždeň">${ICON.next}</button>
       </div>
-      <div class="days">${days}</div>`;
+      <div class="days">${days}</div>
+      ${photosSupported() ? `<button class="btn ghost photo-link" data-action="photos-open">${ICON.camera}Fotky progresu</button>` : ''}`;
   }
 
   // ----- Ranná váha -----
   function renderWeightCard() {
     if (!hasWrite() || !state.plan) return '';
     if (!weightSupported()) {
-      return `<div class="banner"><div style="flex:1"><b>Ranná váha:</b> na zapisovanie treba aktualizovať Apps Script (návod v README).</div></div>`;
+      return `<div class="banner"><div style="flex:1"><b>Ranná váha a fotky:</b> treba aktualizovať Apps Script (návod v README).</div></div>`;
     }
     const today = todayIso();
     const list = getWeights();
@@ -712,6 +718,129 @@
       <div class="chart-block" style="margin-top:14px">${pts.length ? chartSvg(pts, 0) : '<div class="hint">Zatiaľ žiadne váženie.</div>'}</div>
       ${rows ? `<table class="ptable"><thead><tr><th>Dátum</th><th>Váha</th></tr></thead><tbody>${rows}</tbody></table>` : ''}
     </div></div>`;
+  }
+
+  // ----- Fotky progresu -----
+  const photosSupported = () => hasWrite() && state.plan && state.plan.photos && Array.isArray(state.plan.photos.list);
+
+  function renderPhotoCard() {
+    if (!photosSupported() || new Date().getDay() !== 0) return ''; // len v nedeľu
+    const today = (state.plan.photos.list || []).find((x) => x.date === todayIso());
+    if (today && today.count) {
+      return `<button class="pcard done" data-action="photos-open">${ICON.camera}<div><b>Fotky odoslané trénerovi</b><span>Dnes ${today.count} ${today.count === 1 ? 'fotka' : today.count < 5 ? 'fotky' : 'fotiek'} ✓</span></div>${ICON.next}</button>`;
+    }
+    return `<button class="pcard" data-action="photos-open">${ICON.camera}<div><b>Nedeľné fotky progresu</b><span>Odfoť sa a pošli ich trénerovi</span></div><span class="pcard-cta">Pridať</span></button>`;
+  }
+
+  function renderPhotoSheet() {
+    const ph = state.plan.photos || { list: [] };
+    const drafts = state.photoDrafts;
+    const ready = drafts.filter((d) => d.status === 'ready' || d.status === 'error').length;
+    const grid = drafts.length ? `<div class="pgrid">${drafts.map((d) => `
+      <div class="pthumb ${d.status}">
+        <img src="${d.url}" alt="">
+        ${d.status === 'uploading' ? '<div class="pstate"><div class="spinner small"></div></div>' : ''}
+        ${d.status === 'done' ? `<div class="pstate ok">${ICON.checkBig}</div>` : ''}
+        ${d.status === 'error' ? '<div class="pstate err">!</div>' : ''}
+        ${d.status === 'ready' || d.status === 'error' ? `<button class="premove" data-action="photo-remove" data-id="${d.id}" aria-label="Odstrániť">${ICON.close}</button>` : ''}
+      </div>`).join('')}</div>` : '';
+    const past = (ph.list || []).slice().reverse().map((x) => `
+      <a class="prow" href="${esc(x.url)}" target="_blank" rel="noopener"><span>${esc(formatDate(x.date))}</span><span class="pcount">${x.count} ${x.count === 1 ? 'fotka' : x.count < 5 ? 'fotky' : 'fotiek'}</span><span class="pmore">Otvoriť ${ICON.next}</span></a>`).join('');
+    let share = 'Uložia sa na tvoj Google Drive do priečinka „Fitko – progres fotky“. Vidí ich len tréner.';
+    if (ph.sharedWith) share = `Uložia sa na tvoj Google Drive. Priečinok je zdieľaný len s <b>${esc(ph.sharedWith)}</b>.`;
+    else if (ph.sharedWith === '' && ph.folderUrl) share = `Priečinok sa nepodarilo nazdieľať automaticky. <a href="${esc(ph.folderUrl)}" target="_blank" rel="noopener">Otvor ho na Drive</a> a nazdieľaj ho trénerovi.`;
+    return `<div class="sheet-backdrop" data-action="close-sheet"><div class="sheet" role="dialog" aria-label="Fotky progresu">
+      <div class="grab"></div>
+      <div class="sheet-head"><h2>Fotky progresu</h2><button class="icon-btn" data-action="close-sheet" aria-label="Zavrieť">${ICON.close}</button></div>
+      <p>${share}</p>
+      <div class="actions pick">
+        <label class="btn ghost">${ICON.camera}Odfotiť<input type="file" accept="image/*" capture="environment" data-photo-input hidden></label>
+        <label class="btn ghost">${ICON.image}Z galérie<input type="file" accept="image/*" multiple data-photo-input hidden></label>
+      </div>
+      ${grid}
+      ${ready ? `<button class="btn" data-action="photos-upload" ${state.uploading ? 'disabled' : ''}>${state.uploading ? 'Odosielam…' : `Odoslať trénerovi (${ready})`}</button>` : ''}
+      ${past ? `<div class="section-title">Odoslané</div><div class="plist">${past}</div>` : ''}
+    </div></div>`;
+  }
+
+  // Zmenší fotku na max. 1600 px (JPEG), aby sa rýchlo nahrala aj na mobilných dátach.
+  async function resizeImage(file) {
+    const src = URL.createObjectURL(file);
+    try {
+      const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = src; });
+      const scale = Math.min(1, 1600 / Math.max(img.naturalWidth, img.naturalHeight));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(img.naturalWidth * scale);
+      canvas.height = Math.round(img.naturalHeight * scale);
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      return await new Promise((res) => canvas.toBlob(res, 'image/jpeg', 0.82));
+    } finally {
+      URL.revokeObjectURL(src);
+    }
+  }
+  const blobToBase64 = (blob) => new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(String(r.result).split(',')[1]);
+    r.onerror = rej;
+    r.readAsDataURL(blob);
+  });
+
+  async function addPhotoFiles(files) {
+    for (const file of files) {
+      if (state.photoDrafts.length >= 8) { toast('Naraz najviac 8 fotiek'); break; }
+      try {
+        const blob = await resizeImage(file);
+        state.photoDrafts.push({ id: Math.random().toString(36).slice(2), blob, url: URL.createObjectURL(blob), status: 'ready' });
+      } catch (_) {
+        toast('Fotku sa nepodarilo načítať');
+      }
+      render();
+    }
+  }
+
+  async function uploadPhotos() {
+    if (state.uploading) return;
+    state.uploading = true;
+    const date = todayIso();
+    let okCount = 0;
+    for (const d of state.photoDrafts) {
+      if (d.status !== 'ready' && d.status !== 'error') continue;
+      d.status = 'uploading';
+      render();
+      try {
+        const data = await blobToBase64(d.blob);
+        const res = await fetch(state.config.scriptUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({ token: state.config.token, photo: { date, data } }),
+        });
+        const out = await res.json();
+        if (!out.ok) throw new Error(out.error || 'Chyba');
+        d.status = 'done';
+        okCount++;
+        const ph = state.plan.photos;
+        const entry = ph.list.find((x) => x.date === out.date);
+        if (entry) { entry.count = out.count; entry.url = out.url; } else ph.list.push({ date: out.date, count: out.count, url: out.url });
+        ph.list.sort((a, b) => (a.date < b.date ? -1 : 1));
+        if (out.sharedWith != null) ph.sharedWith = out.sharedWith;
+        save(LS.plan, state.plan);
+      } catch (e) {
+        d.status = 'error';
+        d.error = e.message;
+      }
+      render();
+    }
+    state.uploading = false;
+    render();
+    if (okCount) toast(`Odoslané trénerovi: ${okCount} 📸`);
+    else toast('Odoslanie zlyhalo – skontroluj pripojenie a skús znova');
+  }
+
+  function clearDoneDrafts() {
+    state.photoDrafts = state.photoDrafts.filter((d) => {
+      if (d.status === 'done') { URL.revokeObjectURL(d.url); return false; }
+      return true;
+    });
   }
 
   // ----- Tréning (po jednom cviku) -----
@@ -1030,6 +1159,7 @@
     if (state.sheetOpen === 'summary') return renderSummary();
     if (state.sheetOpen === 'progress' && state.progress) return renderProgress();
     if (state.sheetOpen === 'weight') return renderWeightSheet();
+    if (state.sheetOpen === 'photos' && state.plan) return renderPhotoSheet();
     return '';
   }
 
@@ -1041,6 +1171,12 @@
     if (e.target.id && e.target.id.startsWith('rpe-')) {
       const vals = e.target.value.split(/\s+a\s+/).map((s) => s.trim());
       e.target.parentElement.querySelectorAll('.chip').forEach((c) => c.classList.toggle('on', vals.includes(c.dataset.value)));
+    }
+  });
+
+  app.addEventListener('change', (e) => {
+    if (e.target.matches('[data-photo-input]') && e.target.files && e.target.files.length) {
+      addPhotoFiles([...e.target.files]);
     }
   });
 
@@ -1210,8 +1346,23 @@
         render();
         break;
       case 'close-sheet':
+        if (state.sheetOpen === 'photos') clearDoneDrafts();
         state.sheetOpen = null;
         render();
+        break;
+      case 'photos-open':
+        state.sheetOpen = 'photos';
+        render();
+        break;
+      case 'photo-remove': {
+        const d = state.photoDrafts.find((x) => x.id === t.dataset.id);
+        if (d) URL.revokeObjectURL(d.url);
+        state.photoDrafts = state.photoDrafts.filter((x) => x.id !== t.dataset.id);
+        render();
+        break;
+      }
+      case 'photos-upload':
+        uploadPhotos();
         break;
       case 'copy-setup': {
         const payload = btoa(unescape(encodeURIComponent(JSON.stringify(state.config))));

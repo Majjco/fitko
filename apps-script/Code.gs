@@ -30,6 +30,12 @@ const DONE_OFFSETS = { sets: 5, weight: 6, rpe: 7, note: 8 };
 // Záložka pre rannú váhu (skript ju založí sám pri prvom zápise).
 const WEIGHT_SHEET = 'Váha';
 
+// Fotky progresu: ukladajú sa na TVOJ Google Drive do tohto priečinka (po dňoch)
+// a priečinok sa zdieľa len s vlastníkom tabuľky (trénerom). Do tabuľky ide
+// záložka „Fotky“ s dátumom, počtom a odkazom.
+const PHOTO_FOLDER = 'Fitko – progres fotky';
+const PHOTO_SHEET = 'Fotky';
+
 function doGet(e) {
   try {
     const p = (e && e.parameter) || {};
@@ -58,7 +64,7 @@ function doGet(e) {
       .filter(function (s) { return s.getSheetId() !== sheet.getSheetId() && looksLikePlan_(s); })
       .map(function (s) { return s.getName(); });
 
-    return json_({ ok: true, sheet: sheet.getName(), history: history, rows: rows, weights: readWeights_(ss) });
+    return json_({ ok: true, sheet: sheet.getName(), history: history, rows: rows, weights: readWeights_(ss), photos: readPhotos_(ss) });
   } catch (err) {
     return json_({ ok: false, error: String(err) });
   }
@@ -71,6 +77,8 @@ function doGet(e) {
  * { token, sheet, week, day, session: { time, rpe, timeCol, rpeCol } }
  * alebo rannú váhu:
  * { token, weight: { date: 'yyyy-MM-dd', kg } }
+ * alebo jednu fotku progresu (JPEG v base64):
+ * { token, photo: { date: 'yyyy-MM-dd', data } }
  */
 function doPost(e) {
   const lock = LockService.getScriptLock();
@@ -81,6 +89,7 @@ function doPost(e) {
 
     const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
     if (body.weight) return json_(saveWeight_(ss, body.weight));
+    if (body.photo) return json_(savePhoto_(ss, body.photo));
 
     const sheet = findPlanSheet_(ss, body.sheet);
     if (!sheet) return json_({ ok: false, error: 'Hárok sa nenašiel' });
@@ -199,6 +208,91 @@ function saveWeight_(ss, w) {
   ws.getRange(row, 2).setValue(kg).setNumberFormat('0.0');
   if (row > 2) ws.getRange(2, 1, row - 1, 2).sort(1); // chronologicky
   return { ok: true };
+}
+
+// ----- Fotky progresu -----
+function photoFolder_() {
+  const props = PropertiesService.getScriptProperties();
+  const id = props.getProperty('photoFolderId');
+  if (id) {
+    try {
+      const f = DriveApp.getFolderById(id);
+      if (!f.isTrashed()) return f;
+    } catch (_) { /* priečinok zmazaný – založíme nový */ }
+  }
+  const folder = DriveApp.createFolder(PHOTO_FOLDER);
+  props.setProperty('photoFolderId', folder.getId());
+  // Zdieľaj len s vlastníkom tabuľky (trénerom), nie s „kýmkoľvek s odkazom“.
+  let sharedWith = '';
+  try {
+    const owner = DriveApp.getFileById(SPREADSHEET_ID).getOwner();
+    const me = Session.getEffectiveUser().getEmail();
+    if (owner && owner.getEmail() && owner.getEmail() !== me) {
+      folder.addViewer(owner.getEmail());
+      sharedWith = owner.getEmail();
+    }
+  } catch (_) { /* zdieľanie sa nepodarilo – dá sa spraviť ručne na Drive */ }
+  props.setProperty('photoSharedWith', sharedWith);
+  return folder;
+}
+
+function savePhoto_(ss, p) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(p.date)) || !p.data) return { ok: false, error: 'Chýba fotka alebo dátum' };
+  const root = photoFolder_();
+  const days = root.getFoldersByName(p.date);
+  const day = days.hasNext() ? days.next() : root.createFolder(p.date);
+  let count = 0;
+  const files = day.getFiles();
+  while (files.hasNext()) { files.next(); count++; }
+  const blob = Utilities.newBlob(Utilities.base64Decode(p.data), 'image/jpeg', p.date + '_' + (count + 1) + '.jpg');
+  day.createFile(blob);
+  count++;
+
+  // Riadok v záložke „Fotky“: Dátum | Počet fotiek | Odkaz
+  const tz = ss.getSpreadsheetTimeZone();
+  let ws = ss.getSheetByName(PHOTO_SHEET);
+  if (!ws) {
+    ws = ss.insertSheet(PHOTO_SHEET, ss.getSheets().length);
+    ws.getRange(1, 1, 1, 3).setValues([['Dátum', 'Počet fotiek', 'Fotky']]).setFontWeight('bold');
+    ws.setFrozenRows(1);
+    ws.setColumnWidth(1, 110);
+    ws.setColumnWidth(3, 160);
+  }
+  const link = SpreadsheetApp.newRichTextValue().setText('Otvoriť fotky').setLinkUrl(day.getUrl()).build();
+  let row = 0;
+  const last = ws.getLastRow();
+  if (last >= 2) {
+    const dates = ws.getRange(2, 1, last - 1, 1).getValues();
+    for (let i = 0; i < dates.length; i++) {
+      if (dates[i][0] instanceof Date && Utilities.formatDate(dates[i][0], tz, 'yyyy-MM-dd') === p.date) { row = i + 2; break; }
+    }
+  }
+  if (!row) {
+    row = ws.getLastRow() + 1;
+    ws.getRange(row, 1).setValue(Utilities.parseDate(p.date, tz, 'yyyy-MM-dd')).setNumberFormat('d.m.yyyy');
+  }
+  ws.getRange(row, 2).setValue(count);
+  ws.getRange(row, 3).setRichTextValue(link);
+  if (ws.getLastRow() > 2) ws.getRange(2, 1, ws.getLastRow() - 1, 3).sort(1);
+
+  return { ok: true, date: p.date, count: count, url: day.getUrl(), sharedWith: PropertiesService.getScriptProperties().getProperty('photoSharedWith') || '' };
+}
+
+function readPhotos_(ss) {
+  const props = PropertiesService.getScriptProperties();
+  const out = { list: [], sharedWith: props.getProperty('photoSharedWith'), folderUrl: '' };
+  if (props.getProperty('photoFolderId')) out.folderUrl = 'https://drive.google.com/drive/folders/' + props.getProperty('photoFolderId');
+  const ws = ss.getSheetByName(PHOTO_SHEET);
+  if (!ws || ws.getLastRow() < 2) return out;
+  const tz = ss.getSpreadsheetTimeZone();
+  const n = ws.getLastRow() - 1;
+  const vals = ws.getRange(2, 1, n, 2).getValues();
+  const links = ws.getRange(2, 3, n, 1).getRichTextValues();
+  for (let i = 0; i < n; i++) {
+    if (!(vals[i][0] instanceof Date)) continue;
+    out.list.push({ date: Utilities.formatDate(vals[i][0], tz, 'yyyy-MM-dd'), count: Number(vals[i][1]) || 0, url: links[i][0].getLinkUrl() || '' });
+  }
+  return out;
 }
 
 function norm_(s) {

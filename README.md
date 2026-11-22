@@ -16,6 +16,10 @@ takže ich tréner vidí v tabuľke ako predtým.
 - **Graf progresu** váhy pri každom cviku – aj zo starších blokov (napr. MESOCYCLE 1.0)
 - **Ranná váha**: na úvodnej obrazovke zapíšeš dnešnú váhu, vidíš trend a 7-dňový priemer.
   Ukladá sa do záložky **„Váha“** v tej istej tabuľke (skript ju založí sám pri prvom zápise).
+- **Fotky progresu**: v nedeľu sa na úvodnej obrazovke ukáže karta (inak tlačidlo dole).
+  Fotky sa zmenšia a uložia na **tvoj Google Drive** do priečinka „Fitko – progres fotky“ (po dňoch).
+  Priečinok sa automaticky zdieľa **len s vlastníkom tabuľky** (trénerom) a do tabuľky
+  pribudne záložka **„Fotky“** s dátumom, počtom a odkazom.
 - Funguje **offline** – keď vo fitku nie je signál, zápisy počkajú a odošlú sa neskôr
 - Dá sa pridať na plochu ako appka (iPhone: Zdieľať → Pridať na plochu)
 
