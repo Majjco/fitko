@@ -1,0 +1,78 @@
+/* =================== Trénerov portál (trener.html) =================== */
+body.coach-page #app { max-width: 1180px; }
+.coach-page .login { max-width: 420px; margin: 8vh auto 0; }
+.coach-page .login h1 { font-size: 28px; margin: 0 0 6px; }
+.coach-page .login p { color: var(--muted); margin: 0 0 18px; }
+.coach-page .card h3 { margin: 0 0 12px; font-size: 17px; }
+.coach-page .muted { color: var(--muted); }
+.coach-page .accent { color: var(--accent); font-weight: 700; }
+.coach-page .hint { margin: 0 0 12px; }
+.tabs { display: flex; gap: 6px; background: var(--surface); padding: 4px; border-radius: 14px; margin-bottom: 16px; }
+.tab { flex: 1; height: 42px; border-radius: 10px; font-weight: 700; color: var(--muted); }
+.tab.on { background: var(--surface-2); color: var(--text); }
+
+/* Progres – tabuľka cviky × týždne */
+.ptable-wrap { overflow-x: auto; border-radius: var(--radius); background: var(--surface); -webkit-overflow-scrolling: touch; }
+.grid-table { border-collapse: separate; border-spacing: 0; width: 100%; font-size: 14px; font-variant-numeric: tabular-nums; }
+.grid-table th, .grid-table td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; white-space: nowrap; }
+.grid-table thead th, .grid-table tr:first-child th { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .05em; }
+.grid-table th small { display: block; text-transform: none; letter-spacing: 0; font-weight: 500; }
+.grid-table .sticky { position: sticky; left: 0; background: var(--surface); z-index: 1; min-width: 170px; max-width: 240px; white-space: normal; }
+.grid-table td.na { background: rgba(255,255,255,.015); }
+.pc { line-height: 1.2; }
+.pc + .pc { margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--line); }
+.pc small { display: block; color: var(--muted); font-size: 11px; }
+.pc.up b { color: var(--ok); }
+.pc.down b { color: var(--err); }
+.pc.planned { color: #566070; font-style: italic; }
+.grid-table .trend .up { color: var(--ok); font-weight: 700; }
+.grid-table .trend .down { color: var(--err); font-weight: 700; }
+.grid-table .trend .same { color: var(--muted); }
+.linkish { color: var(--text); font-weight: 700; text-align: left; text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 3px; }
+.linkish:hover { text-decoration-color: var(--accent); }
+
+/* Plán – úprava týždňa */
+.copy-week { margin-bottom: 14px; }
+.plan-days { display: grid; gap: 12px; }
+.pday { background: var(--surface); border-radius: var(--radius); padding: 14px; }
+.pday.rest { background: transparent; border: 1px dashed var(--line); padding: 10px 14px; }
+.pday-head { margin-bottom: 10px; }
+.pday-head span { color: var(--muted); }
+.prow-head, .prow { display: grid; grid-template-columns: minmax(0, 2.2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, .7fr) minmax(0, 2fr) auto; gap: 6px; align-items: center; }
+.prow-head { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; font-weight: 700; padding: 0 2px 6px; }
+.prow { padding: 6px 0; border-top: 1px solid var(--line); }
+.prow input { width: 100%; min-width: 0; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 9px 10px; font-size: 15px; outline: none; }
+.prow input:focus { border-color: var(--accent); }
+.prow input.nm { font-weight: 700; }
+.prow.dirty input { border-color: #5a4512; }
+.prow.new { background: rgba(200,245,60,.04); }
+.pactions { display: flex; gap: 6px; align-items: center; }
+.pactions .btn.small { min-height: 38px; padding: 0 12px; font-size: 14px; }
+.pinfo { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 13px; color: var(--muted); padding: 2px 2px 4px; }
+.pinfo b { color: var(--text); font-weight: 600; }
+.pinfo .ls b { color: var(--accent); }
+.add-ex { margin-top: 8px; color: var(--accent); font-weight: 700; padding: 6px 2px; }
+.add-ex:only-of-type { margin-top: 0; }
+
+/* Klient */
+.client-grid { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr); }
+.notes { display: grid; gap: 2px; background: var(--surface-2); border-radius: 12px; overflow: hidden; }
+.note { background: var(--bg); padding: 10px 12px; display: grid; gap: 2px; font-size: 14px; }
+.note .muted { font-size: 12px; }
+.prow-link { display: flex; gap: 10px; padding: 12px; background: var(--bg); color: var(--text); text-decoration: none; }
+.prow-link span:first-child { flex: 1; font-weight: 600; }
+.wide-sheet { max-width: 760px; }
+.wide-sheet .ptable td { white-space: nowrap; }
+.wide-sheet .ptable td.muted { white-space: normal; }
+
+@media (min-width: 860px) {
+  .client-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .client-grid .wide { grid-column: 1 / -1; }
+}
+@media (max-width: 760px) {
+  .prow-head { display: none; }
+  .prow { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, .7fr); }
+  .prow input.nm { grid-column: 1 / -1; }
+  .prow input[data-field="note"] { grid-column: 1 / -1; }
+  .pactions { grid-column: 1 / -1; justify-content: flex-end; }
+}

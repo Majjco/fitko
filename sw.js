@@ -1,7 +1,7 @@
 // Service worker: apka sa otvorí okamžite z pamäte telefónu – aj bez signálu.
 // Pri novej verzii (zmenené CACHE) sa súbory stiahnu načisto zo servera
 // (cache: 'reload' – obíde 10-minútovú pamäť GitHub Pages) a apka sa sama reštartuje.
-const CACHE = 'fitko-v12';
+const CACHE = 'fitko-v13';
 const SHELL = ['./', 'index.html', 'styles.css', 'app.js', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-180.png'];
 
 self.addEventListener('install', (e) => {
@@ -23,7 +23,7 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
   if (e.request.method !== 'GET' || url.origin !== location.origin) return; // Google požiadavky necacheujeme
-  if (/\/(trener\.html|coach\.js)$/.test(url.pathname)) return; // trénerov portál vždy zo siete
+  if (/\/(trener\.html|coach\.js|coach\.css)$/.test(url.pathname)) return; // trénerov portál vždy zo siete
   e.respondWith(
     caches.open(CACHE).then(async (cache) => {
       const cached = await cache.match(e.request, { ignoreSearch: true });
