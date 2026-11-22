@@ -8,7 +8,7 @@
   const DAY_NAMES = ['Ne', 'Po', 'Ut', 'St', 'Št', 'Pi', 'So'];
   const RPE_VALUES = ['6', '7', '7.5', '8', '8.5', '9', '9.5', '10'];
   const HISTORY_TTL = 24 * 60 * 60 * 1000;
-  const APP_VERSION = 10; // zvýš pri každej zmene (zobrazuje sa dole v apke)
+  const APP_VERSION = 11; // zvýš pri každej zmene (zobrazuje sa dole v apke)
   const LS = {
     config: 'fitko.config',
     plan: 'fitko.plan',
@@ -556,6 +556,7 @@
       newSheet.scrollTop = sheetScroll;
     }
     restoreDrafts(drafts);
+    app.querySelectorAll('input[data-last-weight]').forEach(updateDelta);
     if (focused) {
       const el = document.getElementById(focused);
       if (el) el.focus({ preventScroll: true });
@@ -919,6 +920,24 @@
     </button>`;
   }
 
+  // Porovnanie zadanej váhy s minulou: „↑ +5 kg“, „↓ −2,5 kg“, „= ako minule“.
+  function deltaHtml(now, before) {
+    const a = weightParts(now), b = weightParts(before);
+    const items = [];
+    a.forEach((v, i) => {
+      if (v == null || b[i] == null) return;
+      const d = Math.round((v - b[i]) * 10) / 10;
+      items.push(d);
+    });
+    if (!items.length) return '';
+    if (items.every((d) => d === 0)) return '<span class="same">= ako minule</span>';
+    return items.map((d) => (d > 0 ? `<span class="up">↑ +${fmtKg(d)} kg</span>` : d < 0 ? `<span class="down">↓ −${fmtKg(-d)} kg</span>` : '<span class="same">=</span>')).join(' · ') + ' <span class="vs">oproti minule</span>';
+  }
+  function updateDelta(input) {
+    const el = document.getElementById(input.id.replace(/^weight-/, 'delta-'));
+    if (el) el.innerHTML = input.dataset.lastWeight ? deltaHtml(input.value, input.dataset.lastWeight) : '';
+  }
+
   function renderExercise(week, day, ex, i) {
     const id = `${week.n}-${day.n}-${ex.idx}`;
     const done = getDone(week, day, ex);
@@ -927,9 +946,24 @@
     const isSuperset = splitParts(ex.name).length > 1;
 
     const last = findLast(week, day, ex);
-    const lastHtml = last
-      ? `<div class="last">Minule (${esc(lastLabel(last))}): <b>${esc(doneSummary(last.done) || 'splnené')}</b>${last.done.note ? ' – ' + esc(last.done.note) : ''}</div>`
-      : '';
+    const lastSets = last && last.done.sets ? (last.done.sets === 'Ok' ? 'Ok' : prettySets(last.done.sets)) : '–';
+    const lastW = last && last.done.weight ? prettyWeight(last.done.weight) : '–';
+    const lastR = last && last.done.rpe ? prettyRpe(last.done.rpe) : '–';
+    // Tréner vs. minule pod sebou v tých istých stĺpcoch – na prvý pohľad vidno, čo nahodiť.
+    const cmpHtml = `
+      <div class="cmp">
+        <div></div><div class="k">Série</div><div class="k">Váha</div><div class="k">RPE</div>
+        <div class="rl">Plán</div>
+        <div class="v">${esc(prettySets(ex.planned.sets))}</div>
+        <div class="v">${esc(prettyWeight(ex.planned.weight))}</div>
+        <div class="v">${esc(prettyRpe(ex.planned.rpe))}</div>
+        ${last ? `<div class="rl last-l">Minule<small>${esc(lastLabel(last))}</small></div>
+        <div class="v last-v">${esc(lastSets)}</div>
+        <div class="v last-v strong">${esc(lastW)}</div>
+        <div class="v last-v">${esc(lastR)}</div>` : ''}
+      </div>
+      ${last && last.done.note ? `<div class="last-note">Minule si poznamenal: ${esc(last.done.note)}</div>` : ''}`;
+    const canCopy = last && (last.done.sets || last.done.weight);
 
     let status = '';
     if (local) {
@@ -956,14 +990,10 @@
           <div class="ex-name">${exNameHtml(ex.name)}</div>
           ${hasHistory ? `<button class="icon-btn small" data-action="progress" data-name="${esc(ex.name)}" aria-label="Graf progresu">${ICON.chart}</button>` : ''}
         </div>
-        <div class="plan">
-          <div class="cell"><div class="k">Série</div><div class="v">${esc(prettySets(ex.planned.sets))}</div></div>
-          <div class="cell"><div class="k">Váha</div><div class="v">${esc(prettyWeight(ex.planned.weight))}</div></div>
-          <div class="cell"><div class="k">RPE</div><div class="v">${esc(prettyRpe(ex.planned.rpe))}</div></div>
-        </div>
+        ${cmpHtml}
         ${ex.planned.note ? `<div class="coach"><b>Tréner:</b><span>${esc(ex.planned.note)}</span></div>` : ''}
-        ${lastHtml}
         <div class="log">
+          ${canCopy ? `<button class="btn ghost copy-last" data-action="copy-last" data-id="${id}" data-sets="${esc(last.done.sets)}" data-weight="${esc(last.done.weight)}">↺ Ako minule <span>${esc([last.done.sets ? lastSets : '', last.done.weight ? lastW : ''].filter(Boolean).join(' · '))}</span></button>` : ''}
           <div class="row">
             <div class="field">
               <label for="sets-${id}">Série × opak.</label>
@@ -974,7 +1004,8 @@
             </div>
             <div class="field">
               <label for="weight-${id}">Váha (kg)</label>
-              <input id="weight-${id}" data-draft value="${esc(done.weight)}" placeholder="${esc(/choose/i.test(ex.planned.weight) ? (last && last.done.weight) || 'kg' : ex.planned.weight || 'kg')}" ${isSuperset ? '' : 'inputmode="decimal"'} autocomplete="off" autocorrect="off" enterkeyhint="next">
+              <input id="weight-${id}" data-draft value="${esc(done.weight)}" placeholder="${esc(/choose/i.test(ex.planned.weight) ? (last && last.done.weight) || 'kg' : ex.planned.weight || 'kg')}" ${isSuperset ? '' : 'inputmode="decimal"'} autocomplete="off" autocorrect="off" enterkeyhint="next" ${last && last.done.weight ? `data-last-weight="${esc(last.done.weight)}"` : ''}>
+              <div class="delta" id="delta-${id}"></div>
             </div>
           </div>
           <div class="field">
@@ -1181,6 +1212,7 @@
   // ---------------------------------------------------------------------------
   app.addEventListener('input', (e) => {
     if (e.target.matches('[data-draft]')) e.target.dataset.dirty = '1';
+    if (e.target.dataset && e.target.dataset.lastWeight != null) updateDelta(e.target);
     if (e.target.id && e.target.id.startsWith('rpe-')) {
       const vals = e.target.value.split(/\s+a\s+/).map((s) => s.trim());
       e.target.parentElement.querySelectorAll('.chip').forEach((c) => c.classList.toggle('on', vals.includes(c.dataset.value)));
@@ -1264,6 +1296,15 @@
         state.view.openEx = state.view.openEx === idx && t.classList.contains('step') ? null : idx;
         render();
         if (state.view.openEx != null) scrollToEx(week, day, idx);
+        break;
+      }
+      case 'copy-last': {
+        const id = t.dataset.id;
+        const sets = document.getElementById(`sets-${id}`);
+        const weight = document.getElementById(`weight-${id}`);
+        if (t.dataset.sets) { sets.value = t.dataset.sets; sets.dataset.dirty = '1'; }
+        if (t.dataset.weight) { weight.value = t.dataset.weight; weight.dataset.dirty = '1'; updateDelta(weight); }
+        if (navigator.vibrate) navigator.vibrate(20);
         break;
       }
       case 'ok': {

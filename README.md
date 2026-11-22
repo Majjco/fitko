@@ -10,7 +10,8 @@ takže ich tréner vidí v tabuľke ako predtým.
 - Automaticky otvorí **aktuálny týždeň** a zvýrazní **dnešný tréning**
 - Tréning **po jednom cviku**: hore prehľad 1 · 2 · 3…, rozbalený je len aktuálny cvik,
   po uložení apka prejde na ďalší. Hotové cviky sa zbalia do riadku s výsledkom.
-- Pri každom cviku: plán od trénera (série × opak., váha, RPE), jeho poznámka a **čo si dal minule**
+- Pri každom cviku: **plán od trénera a minulý výkon pod sebou** (série, váha, RPE), poznámka trénera,
+  tlačidlo **„Ako minule“** (vyplní série a váhu z minula) a pri váhe živé porovnanie **↑ +5 kg / ↓ −2,5 kg oproti minule**
 - Supersety (`CVIK A + CVIK B`) – jedno políčko ako v tabuľke, napr. `2x8 a 2x9`, RPE `8 a 7`
 - **Súhrn po tréningu**: počet cvikov, trvanie, zlepšenia oproti minule; zapíše `WORKOUT TIME` a `SESH RPE`
 - **Graf progresu** váhy pri každom cviku – aj zo starších blokov (napr. MESOCYCLE 1.0)
