@@ -8,7 +8,7 @@
   const DAY_NAMES = ['Ne', 'Po', 'Ut', 'St', 'Št', 'Pi', 'So'];
   const RPE_VALUES = ['6', '7', '7.5', '8', '8.5', '9', '9.5', '10'];
   const HISTORY_TTL = 24 * 60 * 60 * 1000;
-  const APP_VERSION = 9; // zvýš pri každej zmene (zobrazuje sa dole v apke)
+  const APP_VERSION = 10; // zvýš pri každej zmene (zobrazuje sa dole v apke)
   const LS = {
     config: 'fitko.config',
     plan: 'fitko.plan',
@@ -1413,7 +1413,22 @@
   });
 
   if ('serviceWorker' in navigator && location.protocol === 'https:') {
-    navigator.serviceWorker.register('sw.js').catch(() => {});
+    const hadController = Boolean(navigator.serviceWorker.controller);
+    let reloading = false;
+    // Nová verzia apky prevzala riadenie → reštartuj, ak práve nič nerozpisuješ.
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!hadController || reloading) return;
+      const busy = state.sheetOpen || document.querySelector('[data-draft][data-dirty]') || state.queue.length || state.uploading;
+      if (busy) { toast('Je dostupná nová verzia – zavri a otvor apku'); return; }
+      reloading = true;
+      location.reload();
+    });
+    navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' })
+      .then((reg) => {
+        reg.update().catch(() => {});
+        document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') reg.update().catch(() => {}); });
+      })
+      .catch(() => {});
   }
 
   importSetupFromHash();

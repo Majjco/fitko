@@ -1,11 +1,15 @@
-// Service worker: apka sa otvorí okamžite z pamäte telefónu – aj bez signálu
-// alebo keď domáci server (Mac) práve nie je dostupný. Nová verzia sa stiahne
-// na pozadí a prejaví sa pri ďalšom otvorení.
-const CACHE = 'fitko-v9';
+// Service worker: apka sa otvorí okamžite z pamäte telefónu – aj bez signálu.
+// Pri novej verzii (zmenené CACHE) sa súbory stiahnu načisto zo servera
+// (cache: 'reload' – obíde 10-minútovú pamäť GitHub Pages) a apka sa sama reštartuje.
+const CACHE = 'fitko-v10';
 const SHELL = ['./', 'index.html', 'styles.css', 'app.js', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-180.png'];
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
+  e.waitUntil(
+    caches.open(CACHE)
+      .then((c) => c.addAll(SHELL.map((u) => new Request(u, { cache: 'reload' }))))
+      .then(() => self.skipWaiting())
+  );
 });
 
 self.addEventListener('activate', (e) => {
@@ -22,7 +26,7 @@ self.addEventListener('fetch', (e) => {
   e.respondWith(
     caches.open(CACHE).then(async (cache) => {
       const cached = await cache.match(e.request, { ignoreSearch: true });
-      const network = fetch(e.request)
+      const network = fetch(e.request, { cache: 'no-cache' })
         .then((res) => {
           if (res.ok) cache.put(e.request, res.clone());
           return res;
