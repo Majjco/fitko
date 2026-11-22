@@ -839,7 +839,7 @@
     else if (failed) {
       const msg = String(failed.error || '');
       state.photoError = /permission|povolen|authoriz|DriveApp/i.test(msg)
-        ? 'Skript nemá povolený prístup k Google Drive. V Apps Script editore vyber funkciu doGet, klikni Run a povoľ prístup. Potom skús znova.'
+        ? 'Skript nemá povolený prístup k Google Drive. V Apps Script editore vyber funkciu povolitDrive, klikni Run a povoľ prístup (zaškrtni všetko). Potom skús znova.'
         : /failed to fetch|load failed|network/i.test(msg) ? 'Nepodarilo sa spojiť so serverom – skontroluj pripojenie a skús znova.' : 'Odoslanie zlyhalo: ' + msg;
       render();
     }

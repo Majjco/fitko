@@ -71,6 +71,9 @@ Potrebuješ mať v trénerovej tabuľke **právo upravovať** (to už máš, ke�
 6. Skopíruj URL končiacu na `/exec`.
 7. V apke: **Nastavenia → URL Apps Script** + **Heslo** (TOKEN) → Uložiť.
 
+**Fotky progresu** potrebujú navyše prístup ku Google Drive: v editore vyber funkciu
+`povolitDrive`, klikni **Run** a v okne s povoleniami nechaj zaškrtnuté všetko.
+
 Keď skript neskôr upravíš (napr. nová verzia z tohto repozitára): vlož nový kód, ulož a
 *Nasadiť → Spravovať nasadenia → ✏️ upraviť → Verzia: Nová → Nasadiť*. URL sa nezmení.
 

@@ -295,6 +295,15 @@ function readPhotos_(ss) {
   return out;
 }
 
+/**
+ * Spusti RAZ ručne v editore (vyber „povolitDrive“ → Run), aby si Google
+ * vypýtal povolenie pre Google Drive (potrebné pre fotky progresu).
+ * Na obrazovke s povoleniami nechaj zaškrtnuté všetko („Select all“).
+ */
+function povolitDrive() {
+  DriveApp.getRootFolder();
+}
+
 function norm_(s) {
   return String(s || '').toUpperCase().replace(/\s+/g, ' ').trim();
 }
