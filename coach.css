@@ -76,3 +76,14 @@ body.coach-page #app { max-width: 1180px; }
   .prow input[data-field="note"] { grid-column: 1 / -1; }
   .pactions { grid-column: 1 / -1; justify-content: flex-end; }
 }
+
+/* Kopírovanie dňa */
+.pday-head { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.copy-next { margin-left: auto; color: var(--accent); font-weight: 700; font-size: 14px; padding: 4px 8px; border-radius: 8px; }
+.copy-next:hover, .copy-day:hover { background: var(--surface-2); }
+.copy-day { display: block; width: 100%; text-align: left; margin-top: 8px; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--accent); color: var(--accent); font-weight: 700; }
+.copy-day span { display: block; color: var(--muted); font-weight: 500; font-size: 13px; margin-top: 2px; }
+.copy-day[disabled], .copy-next[disabled] { opacity: .5; }
+.copy-progress { margin-left: auto; color: var(--warn); font-weight: 700; font-size: 14px; }
+
+.prow .btn[disabled] { background: var(--surface-2); color: var(--muted); opacity: 1; }

@@ -313,9 +313,31 @@
     const free = d.slots.filter((c) => !used.has(c) && !pending.includes(c));
     const rows = d.exercises.map((e) => renderPlanRow(week, wi, d, e)).join('') +
       pending.map((col) => renderPlanRow(week, wi, d, { col, name: '', planned: { sets: '', weight: '', rpe: '', note: '' }, done: {} }, true)).join('');
+    const weeks = state.data.weeks;
+    const busy = state.busy.copyDay;
+    // Kopírovanie dňa: z najbližšieho skoršieho týždňa (do prázdneho dňa) alebo do ďalšieho týždňa.
+    let copyFrom = '';
+    if (!d.exercises.length && !pending.length) {
+      for (let k = wi - 1; k >= 0; k--) {
+        const sd = weeks[k].days.find((x) => x.n === d.n);
+        if (sd && sd.exercises.length) {
+          const prev = sd.exercises.map((e) => cap(splitParts(e.name)[0])).slice(0, 3).join(', ');
+          copyFrom = `<button class="copy-day" data-action="copy-day" data-src="${k}" data-dst="${wi}" data-day="${d.n}" ${busy ? 'disabled' : ''}>↺ Skopírovať Deň ${d.n} z týždňa ${weeks[k].n} <span>${sd.exercises.length} cvikov: ${esc(prev)}${sd.exercises.length > 3 ? '…' : ''}</span></button>`;
+          break;
+        }
+      }
+    }
+    let copyTo = '';
+    const nextWeek = weeks[wi + 1];
+    const nd = nextWeek && nextWeek.days.find((x) => x.n === d.n);
+    if (d.exercises.length && nd && !nd.exercises.length) {
+      copyTo = `<button class="copy-next" data-action="copy-day" data-src="${wi}" data-dst="${wi + 1}" data-day="${d.n}" ${busy ? 'disabled' : ''}>→ Skopírovať do týždňa ${nextWeek.n}</button>`;
+    }
+    const progress = busy && busy.key === `${weeks[busy.dst].n}|${d.n}` || busy && busy.srcKey === key ? `<span class="copy-progress">Kopírujem ${busy.done}/${busy.total}…</span>` : '';
     return `<section class="pday ${d.exercises.length || pending.length ? '' : 'rest'}">
-      <div class="pday-head"><b>Deň ${d.n}</b> <span>${esc(formatDate(d.date))}</span>${d.exercises.length || pending.length ? '' : ' <span class="muted">· voľno</span>'}</div>
+      <div class="pday-head"><b>Deň ${d.n}</b> <span>${esc(formatDate(d.date))}</span>${d.exercises.length || pending.length ? '' : ' <span class="muted">· voľno</span>'}${copyTo}${progress}</div>
       ${rows ? `<div class="prow-head"><span>Cvik</span><span>Série × opak.</span><span>Váha</span><span>RPE</span><span>Poznámka pre klienta</span><span></span></div>${rows}` : ''}
+      ${copyFrom}
       ${free.length ? `<button class="add-ex" data-action="add-ex" data-key="${key}" data-col="${free[0]}">+ Pridať cvik</button>` : ''}
     </section>`;
   }
@@ -483,6 +505,7 @@
         render(); break;
       }
       case 'save-row': await saveRow(t.dataset.row, false); break;
+      case 'copy-day': await copyDay(Number(t.dataset.src), Number(t.dataset.dst), Number(t.dataset.day)); break;
       case 'remove-row':
         if (confirm('Odstrániť tento cvik z plánu?')) await saveRow(t.dataset.row, true);
         break;
@@ -500,6 +523,36 @@
         break;
       }
     }
+  }
+
+  // Skopíruje cviky dňa (názov + PLANNED) z týždňa src do toho istého dňa v týždni dst.
+  // Používa existujúcu operáciu „plan“ – každý cvik jeden zápis, do prázdneho stĺpca.
+  async function copyDay(srcWi, dstWi, dayN) {
+    const weeks = state.data.weeks;
+    const sd = weeks[srcWi].days.find((x) => x.n === dayN);
+    const dd = weeks[dstWi].days.find((x) => x.n === dayN);
+    if (!sd || !dd || dd.exercises.length) { toast('Cieľový deň už nie je prázdny'); return; }
+    const list = sd.exercises.slice();
+    state.busy.copyDay = { dst: dstWi, key: `${weeks[dstWi].n}|${dayN}`, srcKey: `${weeks[srcWi].n}|${dayN}`, done: 0, total: list.length };
+    render();
+    let failed = null;
+    for (const e of list) {
+      const col = dd.slots.includes(e.col) ? e.col : dd.slots.find((c) => !dd.exercises.some((x) => x.col === c));
+      if (!col) break;
+      const fields = { name: e.name, sets: e.planned.sets, weight: e.planned.weight, rpe: e.planned.rpe, note: e.planned.note };
+      try {
+        const out = await apiPost({ op: 'plan', week: weeks[dstWi].n, day: dayN, col, expect: '', fields });
+        if (!out.ok) throw new Error(out.error);
+        dd.exercises.push({ col, name: e.name, planned: { ...e.planned }, done: {} });
+        dd.exercises.sort((a, b) => a.col - b.col);
+      } catch (err) { failed = err.message; break; }
+      state.busy.copyDay.done++;
+      render();
+    }
+    state.busy.copyDay = null;
+    render();
+    if (failed) toast('Kopírovanie sa prerušilo: ' + failed);
+    else toast(`Deň ${dayN} skopírovaný do týždňa ${weeks[dstWi].n} – uprav váhy`);
   }
 
   async function saveRow(id, remove) {
