@@ -27,6 +27,9 @@ const COL_SESSION_RPE_DONE = 60; // BH
 
 const DONE_OFFSETS = { sets: 5, weight: 6, rpe: 7, note: 8 };
 
+// Záložka pre rannú váhu (skript ju založí sám pri prvom zápise).
+const WEIGHT_SHEET = 'Váha';
+
 function doGet(e) {
   try {
     const p = (e && e.parameter) || {};
@@ -55,7 +58,7 @@ function doGet(e) {
       .filter(function (s) { return s.getSheetId() !== sheet.getSheetId() && looksLikePlan_(s); })
       .map(function (s) { return s.getName(); });
 
-    return json_({ ok: true, sheet: sheet.getName(), history: history, rows: rows });
+    return json_({ ok: true, sheet: sheet.getName(), history: history, rows: rows, weights: readWeights_(ss) });
   } catch (err) {
     return json_({ ok: false, error: String(err) });
   }
@@ -66,6 +69,8 @@ function doGet(e) {
  * { token, sheet, week, day, ex, col, name, fields: { sets, weight, rpe, note } }
  * alebo pre celý tréning:
  * { token, sheet, week, day, session: { time, rpe, timeCol, rpeCol } }
+ * alebo rannú váhu:
+ * { token, weight: { date: 'yyyy-MM-dd', kg } }
  */
 function doPost(e) {
   const lock = LockService.getScriptLock();
@@ -75,6 +80,8 @@ function doPost(e) {
     if (body.token !== TOKEN) return json_({ ok: false, error: 'Nesprávny token' });
 
     const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    if (body.weight) return json_(saveWeight_(ss, body.weight));
+
     const sheet = findPlanSheet_(ss, body.sheet);
     if (!sheet) return json_({ ok: false, error: 'Hárok sa nenašiel' });
 
@@ -151,6 +158,47 @@ function findDayRow_(sheet, week, day) {
     if (d && Number(d[1]) === day) return i + 1;
   }
   return null;
+}
+
+function readWeights_(ss) {
+  const ws = ss.getSheetByName(WEIGHT_SHEET);
+  if (!ws || ws.getLastRow() < 2) return [];
+  const tz = ss.getSpreadsheetTimeZone();
+  return ws.getRange(2, 1, ws.getLastRow() - 1, 2).getValues()
+    .filter(function (r) { return r[0] instanceof Date && r[1] !== '' && !isNaN(Number(r[1])); })
+    .map(function (r) { return { date: Utilities.formatDate(r[0], tz, 'yyyy-MM-dd'), kg: Number(r[1]) }; });
+}
+
+function saveWeight_(ss, w) {
+  const kg = Number(w.kg);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(w.date)) || !(kg > 20 && kg < 400)) {
+    return { ok: false, error: 'Neplatná váha alebo dátum' };
+  }
+  const tz = ss.getSpreadsheetTimeZone();
+  let ws = ss.getSheetByName(WEIGHT_SHEET);
+  if (!ws) {
+    ws = ss.insertSheet(WEIGHT_SHEET, ss.getSheets().length);
+    ws.getRange(1, 1, 1, 2).setValues([['Dátum', 'Ranná váha (kg)']]).setFontWeight('bold');
+    ws.setFrozenRows(1);
+    ws.setColumnWidth(1, 110);
+    ws.setColumnWidth(2, 140);
+  }
+  const last = ws.getLastRow();
+  if (last >= 2) {
+    const dates = ws.getRange(2, 1, last - 1, 1).getValues();
+    for (let i = 0; i < dates.length; i++) {
+      const d = dates[i][0];
+      if (d instanceof Date && Utilities.formatDate(d, tz, 'yyyy-MM-dd') === w.date) {
+        ws.getRange(i + 2, 2).setValue(kg);
+        return { ok: true, updated: true };
+      }
+    }
+  }
+  const row = ws.getLastRow() + 1;
+  ws.getRange(row, 1).setValue(Utilities.parseDate(w.date, tz, 'yyyy-MM-dd')).setNumberFormat('d.m.yyyy');
+  ws.getRange(row, 2).setValue(kg).setNumberFormat('0.0');
+  if (row > 2) ws.getRange(2, 1, row - 1, 2).sort(1); // chronologicky
+  return { ok: true };
 }
 
 function norm_(s) {

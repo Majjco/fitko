@@ -14,6 +14,8 @@ takže ich tréner vidí v tabuľke ako predtým.
 - Supersety (`CVIK A + CVIK B`) – jedno políčko ako v tabuľke, napr. `2x8 a 2x9`, RPE `8 a 7`
 - **Súhrn po tréningu**: počet cvikov, trvanie, zlepšenia oproti minule; zapíše `WORKOUT TIME` a `SESH RPE`
 - **Graf progresu** váhy pri každom cviku – aj zo starších blokov (napr. MESOCYCLE 1.0)
+- **Ranná váha**: na úvodnej obrazovke zapíšeš dnešnú váhu, vidíš trend a 7-dňový priemer.
+  Ukladá sa do záložky **„Váha“** v tej istej tabuľke (skript ju založí sám pri prvom zápise).
 - Funguje **offline** – keď vo fitku nie je signál, zápisy počkajú a odošlú sa neskôr
 - Dá sa pridať na plochu ako appka (iPhone: Zdieľať → Pridať na plochu)
 
@@ -65,7 +67,8 @@ Potrebuješ mať v trénerovej tabuľke **právo upravovať** (to už máš, ke�
 6. Skopíruj URL končiacu na `/exec`.
 7. V apke: **Nastavenia → URL Apps Script** + **Heslo** (TOKEN) → Uložiť.
 
-Keď skript neskôr upravíš: *Nasadiť → Spravovať nasadenia → upraviť → Verzia: Nová*.
+Keď skript neskôr upravíš (napr. nová verzia z tohto repozitára): vlož nový kód, ulož a
+*Nasadiť → Spravovať nasadenia → ✏️ upraviť → Verzia: Nová → Nasadiť*. URL sa nezmení.
 
 So zapnutým zápisom si apka nájde aktuálny hárok sama (prvý viditeľný hárok s `WEEK 1`),
 takže keď tréner založí nový blok a starý skryje, netreba nič meniť.

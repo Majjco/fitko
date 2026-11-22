@@ -176,7 +176,7 @@
     const c = state.config;
     if (hasWrite()) {
       const data = await scriptGet({ sheet: c.sheetName });
-      return { sheet: data.sheet, rows: data.rows.map((r) => r.c), source: 'script', history: data.history || null };
+      return { sheet: data.sheet, rows: data.rows.map((r) => r.c), source: 'script', history: data.history || null, weights: Array.isArray(data.weights) ? data.weights : null };
     }
     if (!c.sheetId) throw new Error('Chýba odkaz na tabuľku');
     const names = c.sheetName ? [c.sheetName, c.sheetName + ' ', c.sheetName.trim()] : [''];
@@ -293,7 +293,7 @@
       const grid = await fetchGrid();
       const weeks = parsePlan(grid.rows);
       if (!weeks.length) throw new Error('Plán je prázdny – nenašiel som žiadny „WEEK“ blok');
-      state.plan = { v2: true, sheet: grid.sheet, weeks, fetchedAt: Date.now(), source: grid.source, history: grid.history };
+      state.plan = { v2: true, sheet: grid.sheet, weeks, fetchedAt: Date.now(), source: grid.source, history: grid.history, weights: grid.weights || null };
       save(LS.plan, state.plan);
       // Hodnoty, ktoré už sú v tabuľke, netreba držať lokálne.
       for (const [k, e] of Object.entries(state.local)) {
@@ -360,6 +360,35 @@
     if (!hasWrite()) return;
     const key = 'session|' + dayKey(week.n, day.n);
     enqueue({ key, sheet: state.plan.sheet, week: week.n, day: day.n, session: { ...session, timeCol: day.timeCol, rpeCol: day.rpeCol } });
+  }
+
+  // ----- Ranná váha (záložka „Váha“ v tabuľke) -----
+  const weightSupported = () => hasWrite() && state.plan && Array.isArray(state.plan.weights);
+
+  function getWeights() {
+    const map = new Map();
+    for (const w of (state.plan && state.plan.weights) || []) map.set(w.date, { date: w.date, kg: w.kg });
+    for (const [k, e] of Object.entries(state.local)) {
+      if (k.startsWith('weight|')) map.set(e.fields.date, { date: e.fields.date, kg: e.fields.kg, status: e.status });
+    }
+    return [...map.values()].sort((a, b) => (a.date < b.date ? -1 : 1));
+  }
+
+  function saveWeight(date, kg) {
+    const key = 'weight|' + date;
+    state.local[key] = { fields: { date, kg }, status: 'pending' };
+    save(LS.local, state.local);
+    enqueue({ key, weight: { date, kg } });
+  }
+
+  function avgBetween(list, fromIso, toIso) {
+    const vals = list.filter((w) => w.date >= fromIso && w.date <= toIso).map((w) => w.kg);
+    return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+  }
+  function isoMinus(days) {
+    const d = new Date();
+    d.setDate(d.getDate() - days);
+    return isoDate(d);
   }
 
   async function flushQueue() {
@@ -600,12 +629,89 @@
       </div>
       ${renderBanners()}
       ${!hasWrite() ? `<div class="banner"><div style="flex:1">Režim <b>len na čítanie</b> – výsledky sa ukladajú iba v telefóne.</div><button data-action="settings">Zapnúť zápis</button></div>` : ''}
+      ${renderWeightCard()}
       <div class="weekbar">
         <button class="icon-btn" data-action="week" data-dir="-1" ${wi <= 0 ? 'disabled' : ''} aria-label="Predchádzajúci týždeň">${ICON.back}</button>
         <div class="label">Týždeň ${week.n}<small>${esc(range)}</small></div>
         <button class="icon-btn" data-action="week" data-dir="1" ${wi >= weeks.length - 1 ? 'disabled' : ''} aria-label="Ďalší týždeň">${ICON.next}</button>
       </div>
       <div class="days">${days}</div>`;
+  }
+
+  // ----- Ranná váha -----
+  function renderWeightCard() {
+    if (!hasWrite() || !state.plan) return '';
+    if (!weightSupported()) {
+      return `<div class="banner"><div style="flex:1"><b>Ranná váha:</b> na zapisovanie treba aktualizovať Apps Script (návod v README).</div></div>`;
+    }
+    const today = todayIso();
+    const list = getWeights();
+    const todayW = list.find((w) => w.date === today);
+    const editing = !todayW || state.view.weightEdit;
+
+    const avg7 = avgBetween(list, isoMinus(6), today);
+    const avgPrev = avgBetween(list, isoMinus(13), isoMinus(7));
+    let stats = '';
+    if (avg7 != null) {
+      const diff = avgPrev != null ? avg7 - avgPrev : null;
+      const diffHtml = diff == null ? '' : ` <span class="wdiff">${diff > 0 ? '+' : diff < 0 ? '−' : '±'}${fmtKg(Math.abs(diff))}</span>`;
+      stats = `<span>7-dňový priemer <b>${fmtKg(avg7)} kg</b>${diffHtml}</span>`;
+    }
+    const recent = list.filter((w) => w.date >= isoMinus(29));
+    const spark = recent.length >= 2 ? sparkline(recent) : '';
+
+    const status = todayW && todayW.status === 'pending' ? '<span class="status pending">Odosielam…</span>'
+      : todayW && todayW.status === 'error' ? '<span class="status err">Neuložené</span>' : '';
+
+    const head = editing
+      ? `<div class="wrow">
+          <div class="wlabel">Ranná váha<small>${esc(formatDate(today))}</small></div>
+          <div class="winput"><input id="w-today" data-draft inputmode="decimal" autocomplete="off" placeholder="${esc(list.length ? fmtKg(list[list.length - 1].kg) : '0,0')}" value="${todayW ? esc(fmtKg(todayW.kg)) : ''}"><span>kg</span></div>
+          <button class="btn small" data-action="weight-save">Uložiť</button>
+        </div>`
+      : `<div class="wrow">
+          <div class="wlabel">Dnes <b>${esc(fmtKg(todayW.kg))} kg</b> ${status || `<span class="wok">${ICON.check}</span>`}</div>
+          <button class="btn small ghost" data-action="weight-edit">Upraviť</button>
+        </div>`;
+
+    return `<div class="wcard">
+      ${head}
+      ${stats || spark ? `<button class="wstats" data-action="weight-open" aria-label="Graf váhy">${spark}<div class="wmeta">${stats}<span class="wmore">Graf ${ICON.next}</span></div></button>` : ''}
+    </div>`;
+  }
+
+  function sparkline(list) {
+    const W = 300, H = 36;
+    const vals = list.map((w) => w.kg);
+    let min = Math.min(...vals), max = Math.max(...vals);
+    if (max - min < 1) { min -= 0.5; max += 0.5; }
+    const t0 = new Date(list[0].date).getTime(), t1 = new Date(list[list.length - 1].date).getTime();
+    const x = (w) => (t1 === t0 ? W / 2 : 3 + ((new Date(w.date).getTime() - t0) / (t1 - t0)) * (W - 6));
+    const y = (v) => 4 + (1 - (v - min) / (max - min)) * (H - 8);
+    const d = list.map((w, i) => `${i ? 'L' : 'M'}${x(w).toFixed(1)},${y(w.kg).toFixed(1)}`).join(' ');
+    const lastW = list[list.length - 1];
+    return `<svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true"><path d="${d}"/><circle cx="${x(lastW)}" cy="${y(lastW.kg)}" r="3"/></svg>`;
+  }
+
+  function renderWeightSheet() {
+    const list = getWeights();
+    const pts = list.slice(-90).map((w) => ({ date: w.date, value: w.kg, done: {} }));
+    const rows = list.slice().reverse().slice(0, 30).map((w) => `<tr><td>${esc(formatDate(w.date))}</td><td><b>${esc(fmtKg(w.kg))}</b> kg</td></tr>`).join('');
+    const today = todayIso();
+    const avg7 = avgBetween(list, isoMinus(6), today);
+    const avg30 = avgBetween(list, isoMinus(29), today);
+    return `<div class="sheet-backdrop" data-action="close-sheet"><div class="sheet" role="dialog" aria-label="Ranná váha">
+      <div class="grab"></div>
+      <div class="sheet-head"><h2>Ranná váha</h2><button class="icon-btn" data-action="close-sheet" aria-label="Zavrieť">${ICON.close}</button></div>
+      <p>Ukladá sa do záložky „Váha“ v trénerovej tabuľke.</p>
+      <div class="tiles">
+        <div class="tile"><div class="tile-v">${list.length ? fmtKg(list[list.length - 1].kg) : '–'}</div><div class="tile-k">posledná</div></div>
+        <div class="tile"><div class="tile-v">${avg7 != null ? fmtKg(avg7) : '–'}</div><div class="tile-k">priemer 7 dní</div></div>
+        <div class="tile"><div class="tile-v">${avg30 != null ? fmtKg(avg30) : '–'}</div><div class="tile-k">priemer 30 dní</div></div>
+      </div>
+      <div class="chart-block" style="margin-top:14px">${pts.length ? chartSvg(pts, 0) : '<div class="hint">Zatiaľ žiadne váženie.</div>'}</div>
+      ${rows ? `<table class="ptable"><thead><tr><th>Dátum</th><th>Váha</th></tr></thead><tbody>${rows}</tbody></table>` : ''}
+    </div></div>`;
   }
 
   // ----- Tréning (po jednom cviku) -----
@@ -923,6 +1029,7 @@
   function renderSheet() {
     if (state.sheetOpen === 'summary') return renderSummary();
     if (state.sheetOpen === 'progress' && state.progress) return renderProgress();
+    if (state.sheetOpen === 'weight') return renderWeightSheet();
     return '';
   }
 
@@ -1072,6 +1179,27 @@
         render();
         break;
       }
+      case 'weight-save': {
+        const input = document.getElementById('w-today');
+        const kg = parseFloat(String(input.value).replace(',', '.'));
+        if (!(kg > 20 && kg < 400)) { toast('Zadaj váhu v kg, napr. 84,6'); return; }
+        delete input.dataset.dirty;
+        saveWeight(todayIso(), Math.round(kg * 10) / 10);
+        state.view.weightEdit = false;
+        if (navigator.vibrate) navigator.vibrate(30);
+        render();
+        break;
+      }
+      case 'weight-edit':
+        state.view.weightEdit = true;
+        render();
+        requestAnimationFrame(() => { const el = document.getElementById('w-today'); if (el) el.focus(); });
+        break;
+      case 'weight-open':
+        state.progress = { kind: 'weight', sel: null };
+        state.sheetOpen = 'weight';
+        render();
+        break;
       case 'progress':
         state.progress = { name: t.dataset.name, sel: null };
         state.sheetOpen = 'progress';
