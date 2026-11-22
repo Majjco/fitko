@@ -754,8 +754,8 @@
       <div class="sheet-head"><h2>Fotky progresu</h2><button class="icon-btn" data-action="close-sheet" aria-label="Zavrieť">${ICON.close}</button></div>
       <p>${share}</p>
       <div class="actions pick">
-        <label class="btn ghost">${ICON.camera}Odfotiť<input type="file" accept="image/*" capture="environment" data-photo-input hidden></label>
-        <label class="btn ghost">${ICON.image}Z galérie<input type="file" accept="image/*" multiple data-photo-input hidden></label>
+        <label class="btn ghost" for="photo-camera">${ICON.camera}Odfotiť</label>
+        <label class="btn ghost" for="photo-gallery">${ICON.image}Z galérie</label>
       </div>
       ${grid}
       ${state.photoError && drafts.some((d) => d.status === 'error') ? `<div class="banner err">${esc(state.photoError)}</div>` : ''}
@@ -1183,9 +1183,11 @@
     }
   });
 
-  app.addEventListener('change', (e) => {
+  document.addEventListener('change', (e) => {
     if (e.target.matches('[data-photo-input]') && e.target.files && e.target.files.length) {
-      addPhotoFiles([...e.target.files]);
+      const files = [...e.target.files];
+      e.target.value = ''; // aby sa dala vybrať aj tá istá fotka znova
+      addPhotoFiles(files);
     }
   });
 
@@ -1403,7 +1405,7 @@
   }
 
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && state.plan && Date.now() - (state.plan.fetchedAt || 0) > 5 * 60 * 1000) refresh(true);
+    if (document.visibilityState === 'visible' && !state.sheetOpen && state.plan && Date.now() - (state.plan.fetchedAt || 0) > 5 * 60 * 1000) refresh(true);
   });
 
   if ('serviceWorker' in navigator && location.protocol === 'https:') {
