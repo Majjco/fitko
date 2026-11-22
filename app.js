@@ -8,6 +8,7 @@
   const DAY_NAMES = ['Ne', 'Po', 'Ut', 'St', 'Št', 'Pi', 'So'];
   const RPE_VALUES = ['6', '7', '7.5', '8', '8.5', '9', '9.5', '10'];
   const HISTORY_TTL = 24 * 60 * 60 * 1000;
+  const APP_VERSION = 9; // zvýš pri každej zmene (zobrazuje sa dole v apke)
   const LS = {
     config: 'fitko.config',
     plan: 'fitko.plan',
@@ -641,7 +642,8 @@
         <button class="icon-btn" data-action="week" data-dir="1" ${wi >= weeks.length - 1 ? 'disabled' : ''} aria-label="Ďalší týždeň">${ICON.next}</button>
       </div>
       <div class="days">${days}</div>
-      ${photosSupported() ? `<button class="btn ghost photo-link" data-action="photos-open">${ICON.camera}Fotky progresu</button>` : ''}`;
+      ${photosSupported() ? `<button class="btn ghost photo-link" data-action="photos-open">${ICON.camera}Fotky progresu</button>` : ''}
+      <div class="app-version">Fitko · verzia ${APP_VERSION}</div>`;
   }
 
   // ----- Ranná váha -----
@@ -758,7 +760,7 @@
         <label class="btn ghost" for="photo-gallery">${ICON.image}Z galérie</label>
       </div>
       ${grid}
-      ${state.photoError && drafts.some((d) => d.status === 'error') ? `<div class="banner err">${esc(state.photoError)}</div>` : ''}
+      ${state.photoError && drafts.some((d) => d.status === 'error') ? `<div class="banner err"><div>${esc(state.photoError.hint)}<div class="err-detail">Detail: ${esc(state.photoError.detail)}</div></div></div>` : ''}
       ${ready ? `<button class="btn" data-action="photos-upload" ${state.uploading ? 'disabled' : ''}>${state.uploading ? 'Odosielam…' : `Odoslať trénerovi (${ready})`}</button>` : ''}
       ${past ? `<div class="section-title">Odoslané</div><div class="plist">${past}</div>` : ''}
     </div></div>`;
@@ -838,9 +840,10 @@
     if (okCount && !failed) toast(`Odoslané trénerovi: ${okCount} 📸`);
     else if (failed) {
       const msg = String(failed.error || '');
-      state.photoError = /permission|povolen|authoriz|DriveApp/i.test(msg)
+      const hint = /permission|authoriz|povolen/i.test(msg)
         ? 'Skript nemá povolený prístup k Google Drive. V Apps Script editore vyber funkciu povolitDrive, klikni Run a povoľ prístup (zaškrtni všetko). Potom skús znova.'
-        : /failed to fetch|load failed|network/i.test(msg) ? 'Nepodarilo sa spojiť so serverom – skontroluj pripojenie a skús znova.' : 'Odoslanie zlyhalo: ' + msg;
+        : /failed to fetch|load failed|network/i.test(msg) ? 'Nepodarilo sa spojiť so serverom – skontroluj pripojenie a skús znova.' : 'Odoslanie zlyhalo.';
+      state.photoError = { hint, detail: msg };
       render();
     }
   }
@@ -1161,7 +1164,8 @@
 
         <button class="btn" type="submit" style="margin-top:8px">${first ? 'Načítať plán' : 'Uložiť a načítať'}</button>
         ${first ? '' : `<button class="btn ghost" type="button" data-action="copy-setup">Skopírovať odkaz na nastavenie pre iný mobil</button>`}
-      </form>`;
+      </form>
+      <div class="app-version">Fitko · verzia ${APP_VERSION}</div>`;
   }
 
   function renderSheet() {

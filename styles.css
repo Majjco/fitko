@@ -336,3 +336,6 @@ body.sheet-open { overflow: hidden; }
 .sheet p a { color: var(--accent); }
 
 .pick .btn + .btn { margin-top: 0; }
+
+.err-detail { margin-top: 8px; font-size: 12px; opacity: .85; word-break: break-word; font-family: ui-monospace, Menlo, monospace; }
+.app-version { text-align: center; color: #4b5463; font-size: 12px; margin-top: 24px; }
