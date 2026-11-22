@@ -758,6 +758,7 @@
         <label class="btn ghost">${ICON.image}Z galérie<input type="file" accept="image/*" multiple data-photo-input hidden></label>
       </div>
       ${grid}
+      ${state.photoError && drafts.some((d) => d.status === 'error') ? `<div class="banner err">${esc(state.photoError)}</div>` : ''}
       ${ready ? `<button class="btn" data-action="photos-upload" ${state.uploading ? 'disabled' : ''}>${state.uploading ? 'Odosielam…' : `Odoslať trénerovi (${ready})`}</button>` : ''}
       ${past ? `<div class="section-title">Odoslané</div><div class="plist">${past}</div>` : ''}
     </div></div>`;
@@ -801,6 +802,7 @@
   async function uploadPhotos() {
     if (state.uploading) return;
     state.uploading = true;
+    state.photoError = null;
     const date = todayIso();
     let okCount = 0;
     for (const d of state.photoDrafts) {
@@ -832,8 +834,15 @@
     }
     state.uploading = false;
     render();
-    if (okCount) toast(`Odoslané trénerovi: ${okCount} 📸`);
-    else toast('Odoslanie zlyhalo – skontroluj pripojenie a skús znova');
+    const failed = state.photoDrafts.find((d) => d.status === 'error');
+    if (okCount && !failed) toast(`Odoslané trénerovi: ${okCount} 📸`);
+    else if (failed) {
+      const msg = String(failed.error || '');
+      state.photoError = /permission|povolen|authoriz|DriveApp/i.test(msg)
+        ? 'Skript nemá povolený prístup k Google Drive. V Apps Script editore vyber funkciu doGet, klikni Run a povoľ prístup. Potom skús znova.'
+        : /failed to fetch|load failed|network/i.test(msg) ? 'Nepodarilo sa spojiť so serverom – skontroluj pripojenie a skús znova.' : 'Odoslanie zlyhalo: ' + msg;
+      render();
+    }
   }
 
   function clearDoneDrafts() {
