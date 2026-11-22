@@ -298,10 +298,12 @@ function readPhotos_(ss) {
 /**
  * Spusti RAZ ručne v editore (vyber „povolitDrive“ → Run), aby si Google
  * vypýtal povolenie pre Google Drive (potrebné pre fotky progresu).
- * Na obrazovke s povoleniami nechaj zaškrtnuté všetko („Select all“).
+ * Na obrazovke s povoleniami zaškrtni všetko („Select all“).
+ * Funkcia vytvorí skúšobný priečinok a hneď ho zahodí do koša – ak skončí
+ * bez chyby, skript smie na Drive zapisovať.
  */
 function povolitDrive() {
-  DriveApp.getRootFolder();
+  DriveApp.createFolder('Fitko test').setTrashed(true);
 }
 
 function norm_(s) {

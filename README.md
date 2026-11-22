@@ -72,7 +72,9 @@ Potrebuješ mať v trénerovej tabuľke **právo upravovať** (to už máš, ke�
 7. V apke: **Nastavenia → URL Apps Script** + **Heslo** (TOKEN) → Uložiť.
 
 **Fotky progresu** potrebujú navyše prístup ku Google Drive: v editore vyber funkciu
-`povolitDrive`, klikni **Run** a v okne s povoleniami nechaj zaškrtnuté všetko.
+`povolitDrive`, klikni **Run** a v okne s povoleniami **zaškrtni „Select all“** (políčka nemusia
+byť predvolene zaškrtnuté). Ak beh skončí chybou „Nemáte povolenie…“, odstráň prístup aplikácie
+Fitko na <https://myaccount.google.com/connections> a povoľ znova so všetkými políčkami.
 
 Keď skript neskôr upravíš (napr. nová verzia z tohto repozitára): vlož nový kód, ulož a
 *Nasadiť → Spravovať nasadenia → ✏️ upraviť → Verzia: Nová → Nasadiť*. URL sa nezmení.
