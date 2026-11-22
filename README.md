@@ -24,6 +24,21 @@ takže ich tréner vidí v tabuľke ako predtým.
 - Funguje **offline** – keď vo fitku nie je signál, zápisy počkajú a odošlú sa neskôr
 - Dá sa pridať na plochu ako appka (iPhone: Zdieľať → Pridať na plochu)
 
+## Trénerov portál (voliteľný)
+
+Na adrese `trener.html` je portál pre trénera nad **tou istou tabuľkou** – čo v ňom zmení, je hneď
+v tabuľke a naopak, takže môže kľudne ďalej používať aj Excel.
+
+- **Progres** – všetky cviky × týždne v jednej tabuľke (zapísané váhy klienta, RPE, trend), klik na cvik = graf
+- **Plán** – úprava cvikov (názov, série, váha, RPE, poznámka), pridanie/odobratie cviku,
+  „Naplánovať ďalší týždeň“ (skopíruje plán do najbližšieho prázdneho týždňa a posunie dátumy o 7 dní;
+  keď prázdny týždeň nie je, skopíruje celý blok pod posledný)
+- **Klient** – ranná váha, fotky progresu, poznámky klienta k cvikom
+
+Prístup: v `Code.gs` nastav `COACH_USER` a `COACH_PASS` a trénerovi pošli odkaz
+`https://<github-meno>.github.io/fitko/trener.html#s=<base64 URL skriptu>` + meno a heslo.
+Tréner smie meniť len PLANNED stĺpce; cvik, ktorý už klient zapísal, sa nedá odstrániť.
+
 ## Ako to funguje
 
 ```

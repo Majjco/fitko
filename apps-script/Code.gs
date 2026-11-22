@@ -16,6 +16,11 @@ const SPREADSHEET_ID = 'SEM_VLOZ_ID_TABULKY';
 // Ľubovoľné tajné heslo. To isté zadáš v nastaveniach apky.
 const TOKEN = 'SEM_VLOZ_SVOJE_HESLO';
 
+// Prihlásenie trénera do portálu (trener.html). Tréner smie meniť PLANNED stĺpce,
+// pridávať cviky a plánovať ďalšie týždne. Nechaj prázdne = portál vypnutý.
+const COACH_USER = 'trener';
+const COACH_PASS = 'SEM_VLOZ_HESLO_TRENERA';
+
 // Rozloženie hárku (1-based stĺpce). Cvik 1 začína v D, každý cvik má 9 stĺpcov:
 // 0 názov | 1-4 PLANNED (série, váha, RPE, poznámka) | 5-8 EXECUTED (série, váha, RPE, poznámka)
 const FIRST_EX_COL = 4;
@@ -26,6 +31,15 @@ const COL_WORKOUT_TIME = 58; // BF
 const COL_SESSION_RPE_DONE = 60; // BH
 
 const DONE_OFFSETS = { sets: 5, weight: 6, rpe: 7, note: 8 };
+const PLAN_OFFSETS = { name: 0, sets: 1, weight: 2, rpe: 3, note: 4 };
+
+// 'client' | 'coach' | null
+function role_(p) {
+  if (p.token === TOKEN) return 'client';
+  if (COACH_PASS && COACH_PASS.indexOf('SEM_VLOZ') !== 0 && p.token === COACH_PASS &&
+      String(p.user || '').trim().toLowerCase() === COACH_USER.toLowerCase()) return 'coach';
+  return null;
+}
 
 // Záložka pre rannú váhu (skript ju založí sám pri prvom zápise).
 const WEIGHT_SHEET = 'Váha';
@@ -39,7 +53,8 @@ const PHOTO_SHEET = 'Fotky';
 function doGet(e) {
   try {
     const p = (e && e.parameter) || {};
-    if (p.token !== TOKEN) return json_({ ok: false, error: 'Nesprávny token' });
+    const role = role_(p);
+    if (!role) return json_({ ok: false, error: 'Nesprávne meno alebo heslo' });
     const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
     const sheet = findPlanSheet_(ss, p.sheet);
     if (!sheet) return json_({ ok: false, error: 'Nenašiel som tréningový hárok (bunka „WEEK 1“).' });
@@ -64,7 +79,7 @@ function doGet(e) {
       .filter(function (s) { return s.getSheetId() !== sheet.getSheetId() && looksLikePlan_(s); })
       .map(function (s) { return s.getName(); });
 
-    return json_({ ok: true, sheet: sheet.getName(), history: history, rows: rows, weights: readWeights_(ss), photos: readPhotos_(ss) });
+    return json_({ ok: true, sheet: sheet.getName(), history: history, rows: rows, weights: readWeights_(ss), photos: readPhotos_(ss), role: role, title: ss.getName() });
   } catch (err) {
     return json_({ ok: false, error: String(err) });
   }
@@ -85,9 +100,11 @@ function doPost(e) {
   try {
     lock.waitLock(10000);
     const body = JSON.parse(e.postData.contents);
-    if (body.token !== TOKEN) return json_({ ok: false, error: 'Nesprávny token' });
+    const role = role_(body);
+    if (!role) return json_({ ok: false, error: 'Nesprávne meno alebo heslo' });
 
     const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    if (role === 'coach') return json_(coachOp_(ss, body));
     if (body.weight) return json_(saveWeight_(ss, body.weight));
     if (body.photo) return json_(savePhoto_(ss, body.photo));
 
@@ -153,6 +170,139 @@ function looksLikePlan_(s) {
   if (s.getLastRow() < 3) return false;
   const head = s.getRange('A1:A10').getDisplayValues().map(function (r) { return r[0]; }).join('|');
   return /WEEK\s*1\b/i.test(head);
+}
+
+// ----- Trénerov portál -----
+function coachOp_(ss, body) {
+  const sheet = findPlanSheet_(ss, body.sheet);
+  if (!sheet) return { ok: false, error: 'Hárok sa nenašiel' };
+  if (body.op === 'plan') return savePlan_(sheet, body);
+  if (body.op === 'copyWeek') return copyWeek_(sheet, Number(body.from));
+  return { ok: false, error: 'Neznáma operácia' };
+}
+
+// Zapíše PLANNED hodnoty (názov, série, váha, RPE, poznámka) jedného cviku.
+function savePlan_(sheet, b) {
+  const row = findDayRow_(sheet, Number(b.week), Number(b.day));
+  if (!row) return { ok: false, error: 'Týždeň/deň sa v tabuľke nenašiel' };
+  const col = Number(b.col);
+  if (!(col >= 1)) return { ok: false, error: 'Chýba stĺpec cviku' };
+  const current = sheet.getRange(row, col).getDisplayValue();
+  if (b.expect != null && norm_(current) !== norm_(b.expect)) {
+    return { ok: false, conflict: true, error: 'Cvik sa medzičasom zmenil v tabuľke („' + current + '“). Obnov stránku.' };
+  }
+  const f = b.fields || {};
+  const removing = f.name === '' && Object.keys(PLAN_OFFSETS).every(function (k) { return !f[k]; });
+  if (removing) {
+    const done = sheet.getRange(row, col + 5, 1, 4).getDisplayValues()[0].join('');
+    if (done.trim()) return { ok: false, error: 'Klient už tento cvik zapísal – nedá sa odstrániť.' };
+  }
+  Object.keys(PLAN_OFFSETS).forEach(function (k) {
+    if (f[k] === undefined) return;
+    const cell = sheet.getRange(row, col + PLAN_OFFSETS[k]);
+    cell.setNumberFormat('@');
+    cell.setValue(String(f[k]));
+  });
+  return { ok: true };
+}
+
+// Naplánuje ďalší týždeň: skopíruje plán (cviky + PLANNED) z týždňa `from` do
+// najbližšieho prázdneho týždňa a posunie dátumy o 7 dní. Keď prázdny týždeň
+// neexistuje, skopíruje celý blok týždňa pod posledný a vyčistí EXECUTED.
+function copyWeek_(sheet, from) {
+  const lastRow = sheet.getLastRow();
+  const colA = sheet.getRange(1, 1, lastRow, 1).getDisplayValues().map(function (r) { return String(r[0]).trim(); });
+  const weeks = [];
+  colA.forEach(function (v, i) {
+    const m = v.match(/^WEEK\s*(\d+)/i);
+    if (m) weeks.push({ n: Number(m[1]), row: i + 1 });
+  });
+  const src = weeks.filter(function (w) { return w.n === from; })[0];
+  if (!src) return { ok: false, error: 'Týždeň ' + from + ' sa nenašiel' };
+  const dayRows = function (w) {
+    const out = {};
+    for (let r = w.row + 1; r <= lastRow; r++) {
+      const v = colA[r - 1];
+      if (/^WEEK\s*\d+/i.test(v)) break;
+      const d = v.match(/^DAY\s*(\d+)/i);
+      if (d) out[Number(d[1])] = r;
+      if (/^WEEKLY/i.test(v)) break;
+    }
+    return out;
+  };
+  const exCols = exCols_(sheet, src.row);
+  const srcDays = dayRows(src);
+  const isEmpty = function (w) {
+    const rows = dayRows(w);
+    return Object.keys(rows).every(function (d) {
+      return exCols.every(function (c) { return !String(sheet.getRange(rows[d], c).getDisplayValue()).trim(); });
+    });
+  };
+  let target = weeks.filter(function (w) { return w.n > from && isEmpty(w); }).sort(function (a, b) { return a.n - b.n; })[0];
+  let created = false;
+  if (!target) {
+    // Nový blok: hlavička (riadok s EXERCISE 1 nad WEEK) až prázdny riadok za WEEKLY AVG.
+    const last = weeks[weeks.length - 1];
+    let start = last.row;
+    if (last.row > 1 && /^EXERCISE/i.test(sheet.getRange(last.row - 1, exCols[0]).getDisplayValue())) start = last.row - 1;
+    let end = last.row;
+    while (end < lastRow && !/^WEEKLY/i.test(colA[end - 1])) end++;
+    end++; // prázdny riadok za blokom
+    const height = end - start + 1;
+    const width = sheet.getLastColumn();
+    const dest = end + 1;
+    sheet.getRange(start, 1, height, width).copyTo(sheet.getRange(dest, 1, height, width));
+    const newWeekRow = dest + (last.row - start);
+    const n = Math.max.apply(null, weeks.map(function (w) { return w.n; })) + 1;
+    sheet.getRange(newWeekRow, 1).setValue('WEEK ' + n);
+    target = { n: n, row: newWeekRow };
+    created = true;
+    SpreadsheetApp.flush();
+  }
+  // Pri novo vytvorenom bloku treba čítať stĺpec A znova.
+  const colA2 = created ? sheet.getRange(1, 1, sheet.getLastRow(), 1).getDisplayValues().map(function (r) { return String(r[0]).trim(); }) : colA;
+  const tgtDays = {};
+  for (let r = target.row + 1; r <= colA2.length; r++) {
+    const v = colA2[r - 1];
+    if (/^WEEKLY/i.test(v) || /^WEEK\s*\d+/i.test(v)) break;
+    const d = v.match(/^DAY\s*(\d+)/i);
+    if (d) tgtDays[Number(d[1])] = r;
+  }
+  Object.keys(srcDays).forEach(function (d) {
+    const sr = srcDays[d], tr = tgtDays[d];
+    if (!tr) return;
+    exCols.forEach(function (c) {
+      const planned = sheet.getRange(sr, c, 1, 5).getDisplayValues();
+      sheet.getRange(tr, c, 1, 5).setNumberFormat('@').setValues(planned);
+      sheet.getRange(tr, c + 5, 1, 4).clearContent(); // EXECUTED
+    });
+    const sd = sheet.getRange(sr, 2).getValue();
+    if (sd instanceof Date) {
+      const nd = new Date(sd.getTime());
+      nd.setDate(nd.getDate() + 7 * (target.n - from));
+      sheet.getRange(tr, 2).setValue(nd);
+    }
+    if (created) {
+      sheet.getRange(tr, 3).clearContent(); // poznámka dňa
+      if (sheet.getLastColumn() >= COL_WORKOUT_TIME) sheet.getRange(tr, COL_WORKOUT_TIME).clearContent();
+      if (sheet.getLastColumn() >= COL_SESSION_RPE_DONE) sheet.getRange(tr, COL_SESSION_RPE_DONE).clearContent();
+    }
+  });
+  return { ok: true, week: target.n, created: created };
+}
+
+// Stĺpce (1-based) názvov cvikov podľa hlavičky „EXERCISE n“ nad/v riadku týždňa.
+function exCols_(sheet, weekRow) {
+  const width = sheet.getLastColumn();
+  for (let r = weekRow; r >= Math.max(1, weekRow - 1); r--) {
+    const vals = sheet.getRange(r, 1, 1, width).getDisplayValues()[0];
+    const cols = [];
+    vals.forEach(function (v, i) { if (/^EXERCISE\s*\d+$/i.test(String(v).trim())) cols.push(i + 1); });
+    if (cols.length) return cols;
+  }
+  const out = [];
+  for (let i = 0; i < EX_COUNT; i++) out.push(FIRST_EX_COL + i * EX_WIDTH);
+  return out;
 }
 
 function findDayRow_(sheet, week, day) {
