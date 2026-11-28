@@ -80,6 +80,11 @@ button:focus-visible { outline: 2px solid var(--a1); outline-offset: 2px; }
 .pr span { font-size: 12px; font-weight: 600; opacity: .75; }
 .pr.alt { background: var(--surface); border: 1px solid var(--line); color: var(--text); }
 .pr.alt svg { color: var(--a1); }
+.pr { width: 170px; }
+.pr .num small { font-family: var(--sans); font-style: normal; font-size: 14px; font-weight: 700; opacity: .7; }
+.pr .rt { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; opacity: 1; margin-top: 2px; }
+.pr .rt2 { font-size: 11px; font-weight: 700; opacity: .7; }
+.pr.alt .rt { color: var(--a1); }
 
 /* zoznamy cvikov */
 .list { background: var(--surface); border: 1px solid var(--line); border-radius: 22px; padding: 2px 16px; }
@@ -215,7 +220,16 @@ td.pr-c { color: var(--a1); font-weight: 800; }
     x.trend = x.why && last < prev * 0.995 ? 'down' : x.why ? 'same' : x.change > 0.02 ? 'up' : 'same';
     var all = x.old.concat(x.s);
     x.best = Math.max.apply(null, all.map(function (p) { return p[0]; }));
-    x.prNow = x.s[x.s.length - 1][0] >= x.best && x.s[x.s.length - 1][0] > Math.max.apply(null, (x.old.concat(x.s.slice(0, -1))).map(function (p) { return p[0]; }));
+    var lastP = x.s[x.s.length - 1], before = x.old.concat(x.s.slice(0, -1));
+    var maxKg = Math.max.apply(null, before.map(function (p) { return p[0]; }));
+    var repsAt = Math.max.apply(null, before.filter(function (p) { return p[0] >= lastP[0]; }).map(function (p) { return p[1]; }).concat([0]));
+    var maxVol = Math.max.apply(null, before.map(function (p) { return p[0] * p[1] * x.sets; }));
+    var vNow = lastP[0] * lastP[1] * x.sets;
+    x.recs = [];
+    if (lastP[0] > maxKg) x.recs.push({ t: 'kg', label: 'váhový rekord', sub: '+' + kg(lastP[0] - maxKg) + ' kg' });
+    else if (repsAt && lastP[1] > repsAt) x.recs.push({ t: 'reps', label: 'rekord v opakovaniach', sub: kg(lastP[0]) + ' kg × ' + lastP[1] + ' (doteraz × ' + repsAt + ')' });
+    if (vNow > maxVol) x.recs.push({ t: 'vol', label: 'rekord v objeme', sub: pct(vNow / maxVol - 1) + ' · ' + Math.round(vNow) + ' kg' });
+    x.prNow = x.recs.length > 0;
   });
   var BODY = [];
   (function () { var v = 85.6; for (var i = 0; i < 28; i++) { v += (Math.sin(i * 1.7) * 0.25) - 0.05; BODY.push(Math.round(v * 10) / 10); } })();
@@ -225,7 +239,7 @@ td.pr-c { color: var(--a1); font-weight: 800; }
     [1, 0, 1, 0, 0, 1, 0], [1, 0, 2, 0, 0, 1, 0], [1, 0, 1, 0, 0, 1, 0], [1, 0, 1, 0, 0, 3, 0],
   ];
 
-  var S = { tab: 'prehlad', filter: 'all', sheet: null, metric: 'e', viz: 'D' };
+  var S = { tab: 'prehlad', filter: 'all', sheet: null, metric: 'e', viz: 'E' };
   var phone = document.getElementById('phone');
 
   function spark(vals, cls) {
@@ -332,10 +346,12 @@ td.pr-c { color: var(--a1); font-weight: 800; }
       '<div class="tile"><span class="num">−1,4</span><span class="k">kg váha</span><span class="s">za 4 týždne</span></div></div>' +
       '<div class="sec"><h3>Dochádzka</h3><span>posledných 8 týždňov</span></div><div class="card">' + heat +
       '<div class="legend"><span><i class="grad"></i>odcvičené</span><span><i style="border:2px solid rgba(255,107,107,.55)"></i>vynechané</span><span><i style="border:2px dashed var(--line)"></i>naplánované</span></div></div>' +
-      '<div class="sec"><h3>Rekordy</h3><span>potiahni →</span></div><div class="prs">' + prs.map(function (x, i) {
-        var last = x.s[x.s.length - 1], prevBest = Math.max.apply(null, x.old.concat(x.s.slice(0, -1)).map(function (p) { return p[0]; }));
-        return '<button class="pr ' + (i ? 'alt' : 'grad') + '" data-a="ex" data-n="' + esc(x.n) + '">' + TROPHY + '<span class="num">' + kg(last[0]) + '</span><b>' + esc(x.n) + '</b><span>+' + kg(last[0] - prevBest) + ' kg · ' + DATES[3] + '</span></button>';
+      '<div class="sec"><h3>Rekordy</h3><span>tento týždeň · potiahni →</span></div><div class="prs">' + prs.map(function (x, i) {
+        var last = x.s[x.s.length - 1], r = x.recs[0];
+        return '<button class="pr ' + (i ? 'alt' : 'grad') + '" data-a="ex" data-n="' + esc(x.n) + '">' + TROPHY + '<span class="num">' + kg(last[0]) + '<small> kg</small></span><b>' + esc(x.n) + '</b>' +
+          '<span class="rt">' + r.label + '</span><span>' + r.sub + '</span>' + (x.recs[1] ? '<span class="rt2">+ ' + x.recs[1].label + '</span>' : '') + '</button>';
       }).join('') + '</div>' +
+      '<p class="note">Veľké číslo = najťažšia váha. Rekord sa ráta, keď zdvihneš viac kg, alebo pri rovnakej váhe viac opakovaní, alebo väčší celkový objem (série × opak. × kg).</p>' +
       '<div class="sec"><h3>Najväčší progres</h3><button data-a="tab" data-t="cviky" data-f="up">Všetky</button></div><div class="list' + (S.viz === 'D' || S.viz === 'E' ? ' fills' : '') + '">' + ups.slice(0, 3).map(function (x) { return exRow(x); }).join('') + '</div>' +
       '<div class="sec"><h3>Pozor na</h3><button data-a="tab" data-t="cviky" data-f="warn">Všetky</button></div><div class="list' + (S.viz === 'D' || S.viz === 'E' ? ' fills' : '') + '">' + warn.map(function (x) { return exRow(x, true); }).join('') + '</div>';
   }
@@ -383,6 +399,7 @@ td.pr-c { color: var(--a1); font-weight: 800; }
       '<div class="tile"><span class="num">' + kg(best[0]) + '<small>×' + best[1] + '</small></span><span class="k">najlepšia séria</span></div>' +
       '<div class="tile"><span class="num">' + Math.round(e1(last[0], last[1])) + '</span><span class="k">1RM odhad</span></div></div>' +
       '<table><thead><tr><th>Týždeň</th><th>Série</th><th>kg</th><th>1RM</th></tr></thead><tbody>' + rows + '</tbody></table>' +
+      (x.recs.length ? '<p class="note" style="color:var(--a1)">🏆 Tento týždeň: ' + x.recs.map(function (r) { return r.label + ' (' + r.sub + ')'; }).join(' · ') + '</p>' : '') +
       '<p class="note">' + (x.why ? 'Pozor: ' + esc(x.why) + '. ' : '') + 'Zvislá čiara oddeľuje starší blok.</p></div></div>';
   }
 

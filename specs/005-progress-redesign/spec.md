@@ -75,3 +75,15 @@ Ranná váha: graf denných vážení s čiarou 7-dňového priemeru, posledná,
   **štítok** so šípkou a % (zelený rast „za blok“, sivá stagnácia / červený pokles „oproti
   minule“) a **rad štvorčekov po týždňoch** (zelený = lepšie ako minulý týždeň, sivý = rovnako,
   červený = horšie). Graf ostáva len v detaile cviku.
+
+## Rozhodnutia (prototyp v4)
+
+- **Trend cviku = štýl E**: riadok cviku je sám pruhom – pozadie sa zľava napĺňa zelenou (rast
+  za blok) alebo červenou (pokles oproti minulému týždňu), na konci svietiaca hrana; dĺžka
+  zodpovedá zmene (±20 % = celý riadok). Žiadne ďalšie prvky v riadku.
+- **Rekordy** (vždy oproti všetkým predošlým záznamom cviku vrátane starších blokov):
+  1. **váhový rekord** – najťažšia odcvičená váha (hlavné číslo na karte, „koľko dávaš“);
+  2. **rekord v opakovaniach** – pri rovnakej alebo vyššej váhe viac opakovaní ako kedykoľvek;
+  3. **rekord v objeme** – najväčší objem cviku za jeden tréning (série × opakovania × kg).
+  Karta rekordu ukazuje veľkú váhu, typ rekordu a o koľko; ďalší dosiahnutý typ menším písmom.
+  Rovnaké pravidlá platia pre ohlásenie rekordu pri zápise cviku a v súhrne tréningu.
