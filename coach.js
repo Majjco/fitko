@@ -610,6 +610,7 @@
       <div class="ccard-stats">
         ${ws ? `<div class="st"><b class="num">${ws.done}<small>/${ws.total}</small></b><span>T${ws.w.n}</span></div>` : ''}
         ${wst ? `<div class="st"><b class="num">${esc(fmtKg(wst.last.kg))}<small> kg</small></b><span>váha</span></div>` : ''}
+        ${idle != null ? `<div class="st"><b class="num">${idle <= 0 ? 'dnes' : idle === 1 ? 'včera' : idle + '<small> d</small>'}</b><span>${idle <= 1 ? 'tréning' : 'od tréningu'}</span></div>` : ''}
       </div>
       ${flags.length ? `<div class="flags">${flags.map(([cls, t]) => `<span class="flag ${cls}">${esc(t)}</span>`).join('')}</div>` : ''}
     </button>`;
@@ -658,9 +659,10 @@
     const wd = wst && wst.diff != null ? Math.round(wst.diff * 10) / 10 : null;
     const snap = `<div class="snap">
       <div class="tile hero"><div class="in"><span class="tile-k">Tréningy${ws ? ` · T${ws.w.n}` : ''}</span>
-        <span class="tile-v gtext">${ws ? `${ws.done}<small>/${ws.total}</small>` : '–'}</span></div></div>
+        <span class="tile-v gtext">${ws ? `${ws.done}<small>/${ws.total}</small>` : '–'}</span>
+        <span class="tile-s">${ws ? [ws.next ? `ďalší Deň ${ws.next.n}${ws.next.date ? ' · ' + esc(formatDate(ws.next.date)) : ''}` : 'všetko odcvičené', ws.last ? `naposledy ${esc(formatDate(ws.last))}` : ''].filter(Boolean).join(' · ') : ''}</span></div></div>
       <button class="tile" data-a="body"><div class="row"><span class="tile-k">Váha</span>${wd ? `<span class="tchip ${wd < 0 ? 'dn' : ''}">${wd > 0 ? '↑ +' : '↓ −'}${esc(fmtKg(Math.abs(wd)))} kg</span>` : ''}</div>
-        <span class="tile-v">${wst ? `${esc(fmtKg(wst.last.kg))}<small> kg</small>` : '–'}</span>
+        <span class="tile-v">${wst ? `${esc(fmtKg(wst.last.kg))}<small> kg · ${esc(formatDate(wst.last.date, false))}</small>` : '–'}</span>
         ${wst ? sparkline(wst.recent) : ''}</button>
       <button class="tile" data-a="body"><div class="row"><span class="tile-k">Fotky</span>${lastPhoto ? `<span class="tchip">${lastPhoto.count}</span>` : ''}</div>
         <span class="tile-v">${lastPhoto ? esc(formatDate(lastPhoto.date, false)) : '–'}</span></button>
@@ -879,13 +881,13 @@
         }
       }
     }
-    if (state.drawer && state.drawer.kind === 'ex') out += renderExDrawer(c, d, state.drawer.key);
+    if (state.drawer && state.drawer.kind === 'ex') out += renderExDrawer(c, d, state.drawer.key, state.drawer.m);
     if (state.drawer && state.drawer.kind === 'body') out += renderBodyDrawer(d);
     return out;
   }
 
   function chartSvg(pts, opts) {
-    const W = 380, H = 170, L = 46, R = 12, T = 14, B = 26;
+    const W = opts && opts.wide ? 700 : 380, H = opts && opts.wide ? 220 : 170, L = 46, R = 12, T = 14, B = 26;
     if (!pts.length) return '<p class="hint">Zatiaľ žiadne dáta.</p>';
     const vals = pts.map((p) => p.value);
     let mn = Math.min(...vals), mx = Math.max(...vals);
@@ -902,7 +904,8 @@
     return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img">${grid}${seps}<path class="line" d="${path}"/>${dots}${lbl}</svg>`;
   }
 
-  function renderExDrawer(c, d, key) {
+  // Detail cviku: kľúčové čísla, graf (váha / objem / 1RM) a celá história plán vs. výkon.
+  function renderExDrawer(c, d, key, metric) {
     const r = rowByKey(d, key);
     if (!r) return '';
     const k = nameKey(r.name);
@@ -911,26 +914,48 @@
     const add = (weeks, block, cur) => weeks.forEach((w) => w.days.forEach((day) => day.exercises.forEach((e) => {
       if (nameKey(e.name) !== k || !hasAny(e.done)) return;
       const wp = C.parseWeight(String(e.done.weight).split(/\s+a\s+/)[0]);
-      pts.push({ date: day.date || '', block, cur, week: w.n, e, w: wp && wp.lo ? wp.lo : null, v: C.totalKg(C.volume(e.name, e.planned, e.done)), label: day.date ? formatDate(day.date, false) : 'T' + w.n });
+      const kg = wp && wp.lo ? wp.lo : null;
+      const ps = C.parseSets(String(e.done.sets).split(/\s+a\s+/)[0]);
+      const sets = ps && ps.ok ? String(e.planned.sets).split(/\s+a\s+/)[0] : String(e.done.sets).split(/\s+a\s+/)[0];
+      const reps = C.topReps(sets);
+      pts.push({ date: day.date || '', block, cur, week: w.n, day: day.n, e, kg, reps, v: C.totalKg(C.volume(e.name, e.planned, e.done)), e1: kg ? C.e1rm(kg, reps) : 0, label: day.date ? formatDate(day.date, false) : 'T' + w.n });
     })));
     if (hist) hist.sheets.forEach((s) => add(s.weeks, s.name, false));
     add(d.weeks, d.sheet, true);
     pts.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
-    const wPts = pts.filter((p) => p.w).map((p) => ({ value: p.w, label: p.label, block: p.block, cur: p.cur }));
-    const vPts = pts.filter((p) => p.v).map((p) => ({ value: p.v, label: p.label, block: p.block, cur: p.cur }));
-    const notes = [];
-    for (const p of pts.slice().reverse()) if (p.e.done.note) notes.push([`Klient · ${p.cur ? 'T' + p.week : p.block.trim() + ' · T' + p.week}${p.date ? ' · ' + p.label : ''}`, `„${p.e.done.note}“`]);
-    for (const col of buildModel(d).cols.slice().reverse()) { const cell = r.cells[col.w.n]; if (cell && cell.e.planned.note) notes.push([`Tréner · T${col.w.n}`, cell.e.planned.note]); }
+    pts.forEach((p, i) => { p.rec = C.record(pts.slice(0, i).filter((q) => q.kg).map((q) => ({ kg: q.kg, reps: q.reps, vol: q.v })), { kg: p.kg, reps: p.reps, vol: p.v }); });
+    const m = metric === 'v' || metric === 'e' ? metric : 'w';
+    const cPts = pts.filter((p) => (m === 'v' ? p.v : p.kg)).map((p) => ({ value: m === 'v' ? p.v : m === 'e' ? p.e1 : p.kg, label: p.label, block: p.block, cur: p.cur }));
     const t = r.trend;
     const step = stepFor(d, r.name);
-    return `<div class="drawer-bg" data-a="close-drawer"></div><aside class="drawer" role="dialog" aria-label="Detail cviku">
+    const last = pts[pts.length - 1], prev = pts[pts.length - 2];
+    const cur = pts.filter((p) => p.cur && p.e1);
+    const best = pts.filter((p) => p.kg).reduce((b, p) => (!b || p.kg > b.kg || (p.kg === b.kg && p.reps > b.reps) ? p : b), null);
+    const pctChip = (a, b) => (a && b ? `<span class="tchip ${a > b * 1.005 ? 'up' : a < b * 0.995 ? 'down' : ''}">${esc(C.formatPct(a / b - 1))}</span>` : '');
+    const tiles = last ? `<div class="snap four">
+      <div class="tile"><span class="tile-k">Posledne · ${esc(last.label)}</span><span class="tile-v">${last.kg ? esc(fmtKg(last.kg)) + '<small> kg</small>' : '–'}</span><span class="tile-s">${esc(last.e.done.sets === 'Ok' ? 'Ok' : prettySets(last.e.done.sets))}${last.e.done.rpe ? ' · RPE ' + esc(prettyNum(last.e.done.rpe)) : ''}</span></div>
+      <div class="tile"><div class="row"><span class="tile-k">Rekord</span>${best ? `<span class="tchip">${esc(best.label)}</span>` : ''}</div><span class="tile-v gtext">${best ? esc(fmtKg(best.kg)) + '<small> kg</small>' : '–'}</span><span class="tile-s">${best && best.reps ? '× ' + best.reps + ' opak.' : ''}</span></div>
+      <div class="tile"><div class="row"><span class="tile-k">1RM odhad</span>${cur.length > 1 ? pctChip(cur[cur.length - 1].e1, cur[0].e1) : ''}</div><span class="tile-v">${last.e1 ? Math.round(last.e1) + '<small> kg</small>' : '–'}</span><span class="tile-s">${cur.length > 1 ? 'za blok' : ''}</span></div>
+      <div class="tile"><div class="row"><span class="tile-k">Objem</span>${prev ? pctChip(last.v, prev.v) : ''}</div><span class="tile-v">${last.v ? esc(C.formatVolume(last.v)) + '<small> kg</small>' : '–'}</span><span class="tile-s">${prev && prev.v ? 'oproti minule' : ''}</span></div>
+    </div>` : '';
+    const plan = (e) => [e.planned.sets ? prettySets(e.planned.sets) : '', e.planned.weight ? prettyNum(e.planned.weight) + (isNumW(e.planned.weight) ? ' kg' : '') : '', e.planned.rpe ? 'RPE ' + prettyNum(e.planned.rpe) : ''].filter(Boolean).join(' · ');
+    const rows = pts.slice().reverse().map((p) => {
+      const dn = p.e.done;
+      const notes = [p.e.planned.note ? `<span class="hn coach">T: ${esc(p.e.planned.note)}</span>` : '', dn.note ? `<span class="hn">„${esc(dn.note)}“</span>` : ''].join('');
+      return `<tr class="${p.cur ? '' : 'old'}"><td><b>${esc(p.label)}</b><small>${p.cur ? 'T' + p.week : esc(p.block.trim()) + ' · T' + p.week}</small></td>
+        <td class="muted">${esc(plan(p.e))}</td>
+        <td><b class="kg">${esc(prettyNum(dn.weight) || '–')}${isNumW(dn.weight) ? ' kg' : ''}</b> ${esc(dn.sets === 'Ok' ? 'Ok' : prettySets(dn.sets))}${dn.rpe ? ' · RPE ' + esc(prettyNum(dn.rpe)) : ''}${p.rec ? ` <span class="rec" title="rekord">🏆 ${esc(C.recordChip(p.rec))}</span>` : ''}${notes ? `<div class="hnotes">${notes}</div>` : ''}</td>
+        <td class="r">${p.v ? esc(C.formatVolume(p.v)) : '–'}</td><td class="r">${p.e1 ? Math.round(p.e1) : '–'}</td></tr>`;
+    }).join('');
+    const seg = (key2, l) => `<button class="${m === key2 ? 'on' : ''}" data-a="dm" data-m="${key2}">${l}</button>`;
+    return `<div class="drawer-bg" data-a="close-drawer"></div><aside class="drawer wide" role="dialog" aria-label="Detail cviku">
       <div class="drawer-head"><h2>${esc(nice(r.name))}</h2><button class="icon-btn" data-a="close-drawer" aria-label="Zavrieť">${ICON.close}</button></div>
-      <div class="flags">${t.kind !== 'none' ? `<span class="flag ${t.kind}">${t.kind === 'up' ? '↑ hore' : t.kind === 'down' ? '↓ klesá' : '→ stagnuje'} · ${esc(t.why)}</span>` : ''}${t.fatigue ? '<span class="flag warn">rastie únava</span>' : ''}</div>
-      <section><h3>Váha (kg)</h3>${chartSvg(wPts)}</section>
-      <section><h3>Objem cviku (kg)</h3>${chartSvg(vPts, { vol: true })}</section>
-      <p class="hint">${hist && hist.loading ? 'Načítavam staršie bloky…' : hist && hist.sheets.length ? `Vrátane starších blokov (${esc(hist.sheets.map((s) => s.name.trim()).join(', '))}) – svetlé body, zvislá čiara = nový blok.` : 'Aktuálny blok.'}</p>
+      <div class="flags">${t.kind !== 'none' ? `<span class="flag ${t.kind}">${t.kind === 'up' ? '↑ hore' : t.kind === 'down' ? '↓ klesá' : '→ stagnuje'} · ${esc(t.why)}</span>` : ''}${t.fatigue ? '<span class="flag warn">rastie únava – RPE stúpa pri rovnakej váhe</span>' : ''}</div>
+      ${tiles}
+      <section><div class="seg big" role="group" aria-label="Graf">${seg('w', 'Váha')}${seg('v', 'Objem')}${seg('e', '1RM')}</div>${chartSvg(cPts, { vol: m === 'v', wide: true })}
+        <p class="hint">${hist && hist.loading ? 'Načítavam staršie bloky…' : hist && hist.sheets.length ? 'Svetlé body = staršie bloky.' : ''}</p></section>
+      <section><h3>História</h3>${rows ? `<div class="htabwrap"><table class="htab"><thead><tr><th>Kedy</th><th>Plán</th><th>Výkon</th><th class="r">Objem</th><th class="r">1RM</th></tr></thead><tbody>${rows}</tbody></table></div>` : '<p class="hint">Zatiaľ žiadne zápisy.</p>'}</section>
       <label class="stepset">Krok váhy pre návrhy <select id="step-select" data-step="${esc(k)}">${STEP_OPTIONS.map((v) => `<option value="${v}" ${v === step ? 'selected' : ''}>${fmtKg(v)} kg</option>`).join('')}${STEP_OPTIONS.includes(step) ? '' : `<option selected value="${step}">${fmtKg(step)} kg</option>`}</select></label>
-      <section><h3>Poznámky</h3><div class="notes">${notes.length ? notes.map(([who, txt]) => `<div class="note"><span class="who">${esc(who)}</span>${esc(txt)}</div>`).join('') : '<div class="note">Zatiaľ žiadne.</div>'}</div></section>
     </aside>`;
   }
 
@@ -1086,6 +1111,7 @@
         await saveCell(c, p.w, cell.day.n, cell.e.col, { sets: val('sets'), weight: val('weight'), rpe: val('rpe'), note: val('note') });
         break;
       }
+      case 'dm': if (state.drawer) { state.drawer.m = t.dataset.m; render(); } break;
       case 'ex': state.drawer = { kind: 'ex', key: t.dataset.r }; state.pop = null; render(); loadHistory(c); break;
       case 'body': state.drawer = { kind: 'body' }; state.pop = null; render(); break;
       case 'close-drawer': state.drawer = null; render(); break;

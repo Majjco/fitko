@@ -256,3 +256,9 @@ rozpracovaného týždňa.
   „↓ 1 klesá“); v paneli klienta tri dlaždice bez popisov (Tréningy, Váha so štítkom zmeny,
   Fotky), insighty bez nadpisu, bez legendy „V bunke…“, krátka nápoveda pri naplánovanom
   týždni, lišta „Nový T3 · 4 zmeny“.
+- **Detail cviku (klik na názov)** má pre trénera všetky kľúčové informácie: trend s dôvodom,
+  štyri čísla (posledne – kg, série, RPE; rekord; odhad 1RM so zmenou za blok; objem so zmenou
+  oproti minule), graf **Váha · Objem · 1RM** aj zo starších blokov a **celú históriu**
+  (kedy · plán · výkon · objem · 1RM, pohár pri rekorde, poznámky klienta aj trénera).
+- V prehľade ostali kľúčové údaje: karta klienta ukazuje aj dni od tréningu; dlaždica Tréningy
+  ďalší deň a posledný tréning; dlaždica Váha dátum váženia.

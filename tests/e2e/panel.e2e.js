@@ -53,7 +53,12 @@ const days = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return i
   await page.mouse.click(5, 5);
   await page.click('.exname:text("Squat")');
   await page.waitForSelector('.drawer .chart');
-  assert((await page.textContent('.drawer')).includes('Objem cviku'), 'detail cviku s grafmi');
+  assert((await page.textContent('.drawer')).includes('Objem'), 'detail cviku s grafmi');
+  assert(await page.locator('.drawer .htab tbody tr').count() >= 2, 'detail: história plán vs. výkon');
+  assert((await page.textContent('.drawer .snap')).includes('Rekord'), 'detail: kľúčové čísla');
+  await page.click('.drawer [data-a=dm][data-m=e]');
+  assert(await page.isVisible('.drawer .chart'), 'detail: graf 1RM');
+  if (OUT) await page.screenshot({ path: `${OUT}/panel-ex.png` });
   await page.click('.drawer [data-a=close-drawer]');
 
   // 4) nový týždeň
