@@ -113,3 +113,15 @@ cviku (váha, objem, rekord), ranná váha a fotky.
 - Zvuk na konci pauzy len pri otvorenej apke (iOS nedovolí viac bez push notifikácií).
 - **FR-009** *(v18)*: V Nastaveniach výber vzhľadu Volt / Matrix; uložený len v zariadení; Matrix
   má jemný animovaný „padajúci kód“ v pozadí (pri obmedzení pohybu len statický).
+
+## Zmena po spätnej väzbe (v19, 2026-11-28)
+
+- **US2 – zápis cviku naraz (nahrádza zápis po sériách)**: klient nechce zadávať každú sériu
+  zvlášť. Cvik sa zapisuje jedným formulárom: **Série · Opakovania · Váha** (ovládače ±,
+  predvyplnené plánom alebo minulým výkonom), RPE, poznámka, „Uložiť cvik“. Nerovnaké série
+  (`10, 9, 8`) a supersety cez „Iný zápis“ (voľný text ako doteraz).
+- **US3 – pauza na požiadanie**: tlačidlo „⏱ Pauza“ spustí odpočet (dĺžka z poznámky trénera,
+  inak 90 s); už sa nespúšťa automaticky.
+- **Prepínanie cvikov**: očíslované krúžky hore (ťuknutie), **swipe doľava/doprava** a tlačidlá
+  „‹ Predošlý / Ďalší ›“ dole. Pásiky ako v Instagram stories neboli zrozumiteľné.
+- SC-001 sa mení na: zápis celého cviku podľa plánu = 1 ťuknutie (Uložiť).

@@ -12,7 +12,7 @@
   const DAY_LONG = ['Nedeľa', 'Pondelok', 'Utorok', 'Streda', 'Štvrtok', 'Piatok', 'Sobota'];
   const RPE_VALUES = ['6', '7', '7.5', '8', '8.5', '9', '9.5', '10'];
   const HISTORY_TTL = 24 * 60 * 60 * 1000;
-  const APP_VERSION = 18; // zvýš pri každom vydaní spolu s sw.js, version.json a trener.html
+  const APP_VERSION = 19; // zvýš pri každom vydaní spolu s sw.js, version.json a trener.html
   const LS = {
     config: 'fitko.config',
     plan: 'fitko.plan',
@@ -35,7 +35,7 @@
     local: load(LS.local, {}), // key -> { fields, status, error }
     queue: load(LS.queue, []),
     sessions: load(LS.sessions, {}), // dayKey -> { startedAt, finishedAt, rpe, minutes }
-    live: load(LS.live, null), // { key, ex: { idx: { sets: [{kg, reps}], cur: {kg, reps}, rpe, note, quick, edit, plus } }, rest }
+    live: load(LS.live, null), // { key, ex: { idx: { cur: {sets, reps, kg}, rpe, note, quick, edit, touched } }, rest }
     view: { name: 'today', weekIdx: null, dayN: null, exIdx: null },
     sheetOpen: null, // 'summary' | 'progress' | 'weight' | 'photos' | null
     progress: null,
@@ -525,7 +525,8 @@
   }
   function exState(week, day, ex) {
     const live = liveFor(week, day);
-    if (!live.ex[ex.idx]) {
+    const cur = live.ex[ex.idx];
+    if (!cur || !cur.cur || cur.cur.sets == null) {
       const info = planInfo(ex);
       const last = findLast(week, day, ex);
       const lastSets = last ? C.parseSets(last.done.sets) : null;
@@ -534,11 +535,10 @@
         const lr = lastSets && !lastSets.ok && lastSets.sets[0] ? lastSets.sets[0].min : null;
         reps = lr != null && lr >= info.min && lr <= info.max ? lr : info.min;
       }
-      live.ex[ex.idx] = { sets: [], cur: { kg: defaultKg(ex, last), reps }, rpe: '', note: '', quick: !info, edit: false, plus: 0 };
+      live.ex[ex.idx] = { cur: { sets: info ? info.count : 3, reps, kg: defaultKg(ex, last) }, rpe: '', note: '', quick: !info, edit: false, touched: false };
     }
     return live.ex[ex.idx];
   }
-  const totalSets = (ex, st) => { const info = planInfo(ex); return info ? info.count + (st.plus || 0) : 0; };
   function kgStep(ex, kg) {
     if (/\b(DB|DUMB+ELLS?)\b/i.test(ex.name)) return 2;
     return kg > 0 && kg < 15 ? 1 : 2.5;
@@ -555,20 +555,13 @@
     const info = planInfo(ex);
     return info && info.max <= 6 ? 150 : 90;
   }
-  // Zápis do tabuľky v doterajšom tvare: „3x10“ alebo „10, 9, 8“, jedna váha.
+  // Zápis do tabuľky v doterajšom tvare: „3x10“, váha, RPE.
   function composeFields(ex, st) {
-    const reps = st.sets.map((s) => s.reps);
-    const kgs = st.sets.map((s) => s.kg);
-    const sameReps = reps.every((r) => r === reps[0]);
-    const sameKg = kgs.every((k) => k === kgs[0]);
     const info = planInfo(ex);
     const extra = info && info.extra ? (info.extra.startsWith('/') ? info.extra : ' ' + info.extra) : '';
-    const sets = (sameReps ? `${reps.length}x${reps[0]}` : reps.join(', ')) + extra;
-    const top = Math.max(...kgs);
-    let note = st.note.trim();
-    if (!sameKg) note = [note, 'váhy po sériách: ' + kgs.map(fmtKg).join(' / ')].filter(Boolean).join(' · ');
-    return { sets, weight: top > 0 ? fmtKg(top) : '', rpe: st.rpe, note };
+    return { sets: `${st.cur.sets}x${st.cur.reps}${extra}`, weight: st.cur.kg > 0 ? fmtKg(st.cur.kg) : '', rpe: st.rpe, note: st.note.trim() };
   }
+  const fmtTime = (sec) => `${Math.floor(sec / 60)}:${pad(sec % 60)}`;
   function setRest(week, day, ex) {
     const live = liveFor(week, day);
     const s = restSeconds(ex, day);
@@ -699,7 +692,7 @@
     if (te && te.day.exercises.length) {
       const { week, day } = te;
       const done = dayDone(week, day);
-      const liveStarted = state.live && state.live.key === dayKey(week.n, day.n) && Object.values(state.live.ex).some((x) => x.sets && x.sets.length);
+      const liveStarted = state.live && state.live.key === dayKey(week.n, day.n) && Object.values(state.live.ex).some((x) => x.touched);
       const started = dayStarted(week, day) || liveStarted;
       const count = day.exercises.length;
       const doneCount = day.exercises.filter((e) => hasAny(getDone(week, day, e))).length;
@@ -898,15 +891,24 @@
     const ex = list[pos];
     const s = state.sessions[dayKey(week.n, day.n)] || {};
     const running = s.startedAt && !s.finishedAt && !day.time;
-    const segs = list.map((e, i) => `<button class="${hasAny(getDone(week, day, e)) ? 'done' : ''} ${e.idx === exIdx ? 'cur' : ''}" data-action="go-ex" data-ex="${e.idx}" aria-label="Cvik ${i + 1}"><i></i></button>`).join('');
+    const steps = list.map((e, i) => {
+      const dn = hasAny(getDone(week, day, e));
+      return `<button class="${dn ? 'done' : ''} ${e.idx === exIdx ? 'cur' : ''}" data-action="go-ex" data-ex="${e.idx}" aria-label="Cvik ${i + 1}: ${esc(niceName(e.name))}" ${e.idx === exIdx ? 'aria-current="step"' : ''}>${dn ? ICON.check : i + 1}</button>`;
+    }).join('<span class="stepline"></span>');
+    const prev = list[pos - 1], next = list[pos + 1];
+    const slide = state.view.slide;
+    state.view.slide = 0;
     const finished = Boolean(s.finishedAt) || Boolean(day.time);
     const allDone = list.every((e) => hasAny(getDone(week, day, e)));
     return `<div class="wo-top"><div class="wo-bar"><button class="icon-btn" data-action="back" aria-label="Späť">${ICON.close}</button>
         <span class="eyebrow">Deň ${day.n} · Cvik ${pos + 1} z ${list.length}</span>
         <span class="clock num" id="clock">${running ? clockText(s.startedAt) : esc(formatDate(day.date, false))}</span></div>
-        <div class="segs">${segs}</div></div>
+        <div class="steps">${steps}</div></div>
       ${renderBanners()}
-      <div class="wo-body">${day.note && pos === 0 ? `<div class="daynote">${esc(day.note)}</div>` : ''}${renderExercise(week, day, ex)}</div>
+      <div class="wo-body ${slide > 0 ? 'slide-l' : slide < 0 ? 'slide-r' : ''}">${day.note && pos === 0 ? `<div class="daynote">${esc(day.note)}</div>` : ''}${renderExercise(week, day, ex)}
+        <div class="exnav"><button class="btn ghost small" data-action="go-ex" data-ex="${prev ? prev.idx : ''}" ${prev ? '' : 'disabled'} aria-label="Predošlý cvik">${ICON.back}Predošlý</button>
+          <span>${pos + 1} / ${list.length}<small>potiahni ← →</small></span>
+          <button class="btn ghost small" data-action="go-ex" data-ex="${next ? next.idx : ''}" ${next ? '' : 'disabled'} aria-label="Ďalší cvik">Ďalší${ICON.next}</button></div></div>
       ${(allDone || finished) ? `<div class="wo-foot">${finished
         ? `<button class="btn ghost" data-action="summary">${ICON.check}Tréning hotový – súhrn</button>`
         : '<button class="btn cta" data-action="summary">Dokončiť tréning</button>'}</div>` : ''}`;
@@ -957,44 +959,33 @@
         <div class="row2"><button class="btn ghost" data-action="ex-edit" data-ex="${ex.idx}">Upraviť</button>${nextIdx != null ? `<button class="btn" data-action="go-ex" data-ex="${nextIdx}">Ďalší cvik</button>` : ''}</div></div>`;
     }
     if (st.quick || !planInfo(ex)) return head + renderQuick(week, day, ex, done);
-    return head + renderSets(week, day, ex, st);
+    return head + renderSimple(week, day, ex, st);
   }
 
-  function renderSets(week, day, ex, st) {
+  // Zápis celého cviku naraz: Série · Opakovania · Váha (± predvyplnené plánom), RPE, poznámka.
+  function renderSimple(week, day, ex, st) {
     const info = planInfo(ex);
-    const total = totalSets(ex, st);
     const id = `${week.n}-${day.n}-${ex.idx}`;
-    const best = bestBefore(week, day, ex);
-    const n = Math.max(total, st.sets.length);
-    let html = '';
-    let prShown = false;
-    for (let k = 0; k < n; k++) {
-      const s = st.sets[k];
-      if (s) {
-        const pr = !prShown && best > 0 && s.kg > best;
-        if (pr) prShown = true;
-        const isLast = k === st.sets.length - 1;
-        html += `<div class="set done ${isLast ? 'pop' : ''}"><span class="sn grad">${ICON.check}</span><span class="sv num">${esc(fmtKg(s.kg))} <small>kg</small> × ${s.reps}</span>${pr ? '<span class="pr grad">Rekord</span>' : ''}${isLast ? `<button class="undo" data-action="set-undo" data-ex="${ex.idx}">Vrátiť</button>` : ''}</div>`;
-      } else if (k === st.sets.length) {
-        const range = info.max > info.min ? `${info.min}–${info.max}` : '';
-        html += `<div class="set cur"><div class="row"><span class="sn">${k + 1}</span><b>Séria ${k + 1} z ${total}${range ? ` <span class="muted">· ${range} opak.</span>` : ''}</b></div>
-          <div class="ctrl"><div><div class="lbl">Váha (kg)</div><div class="big"><button data-action="kg" data-d="-1" data-ex="${ex.idx}" aria-label="Menej kg">−</button><input id="kg-${id}" inputmode="decimal" autocomplete="off" value="${st.cur.kg ? esc(fmtKg(st.cur.kg)) : ''}" placeholder="kg" data-cur="kg" data-ex="${ex.idx}" aria-label="Váha v kg"><button data-action="kg" data-d="1" data-ex="${ex.idx}" aria-label="Viac kg">+</button></div></div>
-          <div><div class="lbl">Opakovania</div><div class="big"><button data-action="reps" data-d="-1" data-ex="${ex.idx}" aria-label="Menej opakovaní">−</button><input id="reps-${id}" inputmode="numeric" autocomplete="off" value="${st.cur.reps}" data-cur="reps" data-ex="${ex.idx}" aria-label="Opakovania"><button data-action="reps" data-d="1" data-ex="${ex.idx}" aria-label="Viac opakovaní">+</button></div></div></div>
-          <button class="setdone" data-action="set-done" data-ex="${ex.idx}">${ICON.check}Séria hotová</button></div>`;
-      } else {
-        const r = info.list[k] ? info.list[k].min : info.min;
-        html += `<div class="set next"><span class="sn">${k + 1}</span><span class="sv num">${st.cur.kg ? esc(fmtKg(st.cur.kg)) : '–'} <small>kg</small> × ${r}</span></div>`;
-      }
-    }
-    if (st.sets.length >= total) {
-      html += `<button class="addset" data-action="set-add" data-ex="${ex.idx}">+ séria navyše</button>
-        <div class="rpebox"><b>Ako ťažké to bolo? (RPE)</b>
-          <div class="rpe-row">${RPE_VALUES.map((v) => `<button class="${st.rpe === v ? 'on' : ''}" data-action="ex-rpe" data-ex="${ex.idx}" data-value="${v}">${esc(v.replace('.', ','))}</button>`).join('')}</div>
-          <textarea class="note" id="note-${id}" data-ex="${ex.idx}" data-live-note="1" rows="1" placeholder="Poznámka pre trénera (nepovinné)">${esc(st.note)}</textarea></div>
-        <button class="btn cta" data-action="ex-save" data-ex="${ex.idx}" ${st.rpe ? '' : 'disabled'}>${ICON.check}${st.rpe ? 'Uložiť cvik' : 'Vyber RPE'}</button>`;
-    }
-    html += `<button class="quicklink" data-action="ex-quick" data-ex="${ex.idx}">Zapísať celý cvik naraz (rýchly zápis)</button>`;
-    return html;
+    const last = findLast(week, day, ex);
+    const lastKg = last ? weightParts(last.done.weight)[0] : null;
+    const range = info.max > info.min ? ` <small>${info.min}–${info.max}</small>` : '';
+    const ctl = (key, label, val, mode) => `<div class="fld"><div class="lbl">${label}</div><div class="big">
+      <button data-action="cur" data-k="${key}" data-d="-1" data-ex="${ex.idx}" aria-label="Menej">−</button>
+      <input id="${key}-${id}" inputmode="${mode}" autocomplete="off" value="${esc(val)}" data-cur="${key}" data-ex="${ex.idx}" aria-label="${esc(label.replace(/<[^>]+>/g, ''))}">
+      <button data-action="cur" data-k="${key}" data-d="1" data-ex="${ex.idx}" aria-label="Viac">+</button></div></div>`;
+    const kgDelta = lastKg > 0 && st.cur.kg > 0 && st.cur.kg !== lastKg ? `<span class="${st.cur.kg > lastKg ? 'up' : 'down'}">${st.cur.kg > lastKg ? '↑ +' : '↓ −'}${esc(fmtKg(Math.abs(st.cur.kg - lastKg)))} kg oproti minule</span>` : lastKg > 0 && st.cur.kg === lastKg ? '= ako minule' : '';
+    const rest = restSeconds(ex, day);
+    return `<div class="card logc">
+      <div class="ctrl">${ctl('sets', 'Série', st.cur.sets, 'numeric')}${ctl('reps', 'Opakovania' + range, st.cur.reps, 'numeric')}</div>
+      ${ctl('kg', 'Váha (kg)', st.cur.kg ? fmtKg(st.cur.kg) : '', 'decimal')}
+      <div class="delta" id="kgdelta-${id}">${kgDelta}</div>
+      <div class="lbl">RPE <small>ako ťažké to bolo</small></div>
+      <div class="rpe-row">${RPE_VALUES.map((v) => `<button class="${st.rpe === v ? 'on' : ''}" data-action="ex-rpe" data-ex="${ex.idx}" data-value="${v}">${esc(v.replace('.', ','))}</button>`).join('')}</div>
+      <textarea class="note" id="note-${id}" data-ex="${ex.idx}" data-live-note="1" rows="1" placeholder="Poznámka pre trénera (nepovinné)">${esc(st.note)}</textarea>
+      <button class="btn cta" data-action="ex-save" data-ex="${ex.idx}">${ICON.check}Uložiť cvik</button>
+    </div>
+    <div class="row2 tools"><button class="btn ghost" data-action="rest-start" data-ex="${ex.idx}">⏱ Pauza ${fmtTime(rest)}</button><button class="btn ghost" data-action="ex-quick" data-ex="${ex.idx}">Iný zápis</button></div>
+    <div class="hint center">„Iný zápis“ – nerovnaké série (napr. 10, 9, 8) alebo superset.</div>`;
   }
 
   // Porovnanie zadanej váhy s minulou (rýchly zápis).
@@ -1028,7 +1019,7 @@
         <div class="chipsel" role="group" aria-label="Rýchly výber RPE">${RPE_VALUES.map((v) => `<button class="${rpeVals.includes(v) ? 'on' : ''}" data-action="rpe" data-target="rpe-${id}" data-value="${v}" data-multi="${isSuperset ? 1 : 0}">${v.replace('.', ',')}</button>`).join('')}</div></div>
       <div class="field"><label for="note-${id}">Poznámka pre trénera</label><textarea id="note-${id}" data-draft rows="1" placeholder="Ako to išlo?">${esc(done.note)}</textarea></div>
       <button class="btn cta" data-action="save-ex" data-ex="${ex.idx}" data-id="${id}">${ICON.check}Uložiť cvik</button>
-    </div>${planInfo(ex) ? `<button class="quicklink" data-action="ex-sets" data-ex="${ex.idx}">Späť na zápis po sériách</button>` : ''}`;
+    </div>${planInfo(ex) ? `<button class="quicklink" data-action="ex-sets" data-ex="${ex.idx}">Späť na jednoduchý zápis</button>` : ''}`;
   }
 
   // ----- Pauza -----
@@ -1041,7 +1032,7 @@
     const C2 = 2 * Math.PI * 118;
     const ex = day.exercises.find((e) => e.idx === r.exIdx);
     const st = ex && state.live.ex[ex.idx];
-    const nextTxt = st && st.sets.length < totalSets(ex, st) ? `Ďalej: <b>séria ${st.sets.length + 1} · ${esc(fmtKg(st.cur.kg))} kg × ${st.cur.reps}</b>` : 'Ďalej: <b>ohodnoť cvik (RPE)</b>';
+    const nextTxt = st && st.cur ? `Ďalšia séria: <b>${st.cur.kg ? esc(fmtKg(st.cur.kg)) + ' kg × ' : ''}${st.cur.reps}</b>` : '';
     return `<div class="pause ${left === 0 ? 'end' : ''}" role="dialog" aria-label="Pauza"><div><div class="eyebrow">Pauza</div>
       <div class="rring"><svg viewBox="0 0 260 260"><defs><linearGradient id="rg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" style="stop-color:var(--a1)"/><stop offset="1" style="stop-color:var(--a2)"/></linearGradient></defs><circle class="bgc" cx="130" cy="130" r="118"/><circle class="fg" id="rfg" cx="130" cy="130" r="118" stroke-dasharray="${C2}" stroke-dashoffset="${C2 * (1 - left / r.total)}"/></svg>
       <div class="t"><span class="num" id="rleft">${Math.floor(left / 60)}:${pad(left % 60)}</span><span>${left === 0 ? 'poď na to' : 'oddychuj'}</span></div></div>
@@ -1346,13 +1337,14 @@
       if (st) {
         const v = toNum(t.value);
         if (t.dataset.cur === 'kg') st.cur.kg = v >= 0 ? v : 0;
-        else st.cur.reps = Math.max(0, Math.round(v) || 0);
+        else st.cur[t.dataset.cur] = Math.max(0, Math.round(v) || 0);
+        st.touched = true;
         saveLive();
       }
     }
     if (t.dataset.liveNote && state.live) {
       const st = state.live.ex[t.dataset.ex];
-      if (st) { st.note = t.value; saveLive(); }
+      if (st) { st.note = t.value; st.touched = true; saveLive(); }
     }
   });
   document.addEventListener('change', (e) => {
@@ -1415,6 +1407,32 @@
     } else goEx(next);
   }
 
+  // Swipe doľava/doprava medzi cvikmi (ako na sociálnych sieťach).
+  let touch = null;
+  app.addEventListener('touchstart', (e) => {
+    touch = null;
+    if (state.view.name !== 'workout' || state.sheetOpen || (state.live && state.live.rest) || e.touches.length !== 1) return;
+    if (e.target.closest('input, textarea, .big, .rpe-row, .chipsel, .steps')) return;
+    touch = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+  }, { passive: true });
+  app.addEventListener('touchend', (e) => {
+    if (!touch) return;
+    const dx = e.changedTouches[0].clientX - touch.x, dy = e.changedTouches[0].clientY - touch.y;
+    touch = null;
+    if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+    swipeEx(dx < 0 ? 1 : -1);
+  }, { passive: true });
+  function swipeEx(dir) {
+    const { day } = findDay();
+    if (!day) return;
+    const list = day.exercises;
+    const pos = list.findIndex((e) => e.idx === state.view.exIdx);
+    const np = pos + dir;
+    if (np < 0 || np >= list.length) return;
+    state.view.slide = dir;
+    goEx(list[np].idx);
+  }
+
   function handle(action, t) {
     switch (action) {
       case 'refresh': refresh(); break;
@@ -1440,55 +1458,31 @@
         render();
         break;
       case 'open-day': openDay(Number(t.dataset.week), Number(t.dataset.day)); break;
-      case 'go-ex': goEx(Number(t.dataset.ex)); break;
-      case 'kg': {
+      case 'go-ex': {
+        if (t.dataset.ex === '') break;
+        const { day } = findDay();
+        const from = day ? day.exercises.findIndex((e) => e.idx === state.view.exIdx) : 0;
+        const to = day ? day.exercises.findIndex((e) => e.idx === Number(t.dataset.ex)) : 0;
+        state.view.slide = to > from ? 1 : to < from ? -1 : 0;
+        goEx(Number(t.dataset.ex));
+        break;
+      }
+      case 'cur': {
         const { ex, st } = curEx(t);
         if (!st) break;
-        st.cur.kg = Math.max(0, Math.round((st.cur.kg + Number(t.dataset.d) * kgStep(ex, st.cur.kg)) * 100) / 100);
+        const k = t.dataset.k, d = Number(t.dataset.d);
+        if (k === 'kg') st.cur.kg = Math.max(0, Math.round((st.cur.kg + d * kgStep(ex, st.cur.kg)) * 100) / 100);
+        else st.cur[k] = Math.max(k === 'sets' ? 1 : 0, (st.cur[k] || 0) + d);
+        st.touched = true;
         saveLive();
         render();
         break;
       }
-      case 'reps': {
-        const { st } = curEx(t);
-        if (!st) break;
-        st.cur.reps = Math.max(0, st.cur.reps + Number(t.dataset.d));
-        saveLive();
-        render();
-        break;
-      }
-      case 'set-done': {
-        const { week, day, ex, st } = curEx(t);
-        if (!st) break;
-        if (!(st.cur.reps > 0)) { toast('Zadaj počet opakovaní'); break; }
-        const best = bestBefore(week, day, ex);
-        const wasPr = best > 0 && st.sets.some((s) => s.kg > best);
-        st.sets.push({ kg: st.cur.kg, reps: st.cur.reps });
+      case 'rest-start': {
+        const { week, day, ex } = curEx(t);
+        if (!ex) break;
         startSession(week, day);
-        const info = planInfo(ex);
-        const nextPlan = info && info.list[st.sets.length];
-        if (nextPlan && st.cur.reps < nextPlan.min) st.cur.reps = nextPlan.min;
-        buzz(30);
-        if (!wasPr && best > 0 && st.cur.kg > best) toast(`Nový osobný rekord! ${fmtKg(st.cur.kg)} kg 🏆`);
         setRest(week, day, ex);
-        render();
-        break;
-      }
-      case 'set-undo': {
-        const { st } = curEx(t);
-        if (!st || !st.sets.length) break;
-        const s = st.sets.pop();
-        st.cur = { kg: s.kg, reps: s.reps };
-        if (state.live.rest && state.live.rest.exIdx === Number(t.dataset.ex)) state.live.rest = null;
-        saveLive();
-        render();
-        break;
-      }
-      case 'set-add': {
-        const { st } = curEx(t);
-        if (!st) break;
-        st.plus = (st.plus || 0) + 1;
-        saveLive();
         render();
         break;
       }
@@ -1496,14 +1490,19 @@
         const { st } = curEx(t);
         if (!st) break;
         st.rpe = st.rpe === t.dataset.value ? '' : t.dataset.value;
+        st.touched = true;
         saveLive();
         render();
         break;
       }
       case 'ex-save': {
         const { week, day, ex, st } = curEx(t);
-        if (!st || !st.sets.length || !st.rpe) break;
+        if (!st) break;
+        if (!(st.cur.sets > 0 && st.cur.reps > 0)) { toast('Zadaj počet sérií a opakovaní'); break; }
+        const best = bestBefore(week, day, ex);
+        startSession(week, day);
         saveExercise(week, day, ex, composeFields(ex, st));
+        if (best > 0 && st.cur.kg > best) toast(`Nový osobný rekord! ${fmtKg(st.cur.kg)} kg 🏆`);
         delete state.live.ex[ex.idx];
         if (state.live.rest && state.live.rest.exIdx === ex.idx) state.live.rest = null;
         saveLive();
@@ -1517,13 +1516,13 @@
         const { week, day, ex, st } = curEx(t);
         if (!st) break;
         st.edit = true;
-        // znova po sériách s hodnotami zo zápisu; superset a „Ok“ rýchlym zápisom
+        // jednoduchý zápis s hodnotami zo zápisu; nerovnaké série a supersety „iným zápisom“
         const done = getDone(week, day, ex);
         const ps = C.parseSets(done.sets);
         const kg = weightParts(done.weight)[0];
-        if (planInfo(ex) && ps && !ps.ok) {
-          st.sets = ps.sets.map((s) => ({ kg: kg || 0, reps: s.min }));
-          st.plus = Math.max(0, st.sets.length - planInfo(ex).count);
+        const uniform = ps && !ps.ok && ps.sets.every((x) => x.min === ps.sets[0].min);
+        if (planInfo(ex) && uniform) {
+          st.cur = { sets: ps.sets.length, reps: ps.sets[0].min, kg: kg || 0 };
           st.rpe = String(done.rpe || '');
           st.note = done.note || '';
           st.quick = false;
@@ -1735,7 +1734,7 @@
   }
 
   // Rozpracovaný tréning: po otvorení apky pokračuj tam, kde si skončil.
-  if (state.plan && state.live && state.live.key && Object.values(state.live.ex || {}).some((x) => x.sets && x.sets.length)) {
+  if (state.plan && state.live && state.live.key && Object.values(state.live.ex || {}).some((x) => x.touched)) {
     const [sheet, w, d] = state.live.key.split('|');
     const wi = state.plan.sheet === sheet ? state.plan.weeks.findIndex((x) => x.n === Number(w)) : -1;
     if (wi >= 0) state.view = { name: 'workout', weekIdx: wi, dayN: Number(d), exIdx: null };

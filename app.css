@@ -420,3 +420,34 @@ body.sheet-open { overflow: hidden; }
 .top .who .eyebrow, .top .who b { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .stepper, .big { min-width: 0; }
 .stepper input, .big input { width: 100%; }
+
+/* ---------- v19: krúžky cvikov, prepínanie, jednoduchý zápis ---------- */
+.steps { display: flex; align-items: center; overflow-x: auto; scrollbar-width: none; padding: 2px; }
+.steps::-webkit-scrollbar { display: none; }
+.steps button { flex: none; width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; background: var(--surface); border: 1px solid var(--line); color: var(--muted); font-family: var(--disp); font-weight: 800; font-size: 18px; }
+.steps button svg { width: 16px; height: 16px; }
+.steps button.done { background: var(--surface-2); color: var(--a1); border-color: transparent; }
+.steps button.cur { background: linear-gradient(120deg, var(--a1), var(--a2)); color: var(--ink); border: 0; box-shadow: 0 0 0 3px var(--bg), 0 0 0 5px var(--a1-line); }
+.stepline { flex: 1; min-width: 10px; height: 2px; background: var(--line); }
+.exnav { display: flex; align-items: center; gap: 8px; margin: 18px 0 6px; }
+.exnav .btn.small { min-height: 44px; padding: 0 12px; gap: 4px; }
+.exnav .btn svg { width: 18px; height: 18px; }
+.exnav .btn[disabled] { visibility: hidden; }
+.exnav span { flex: 1; text-align: center; font-weight: 800; font-family: var(--disp); font-size: 18px; color: var(--muted); }
+.exnav span small { display: block; font-family: var(--sans); font-size: 11px; font-weight: 600; color: var(--dim); }
+.logc { display: grid; gap: 12px; border-color: var(--a1-line); }
+.logc .lbl { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 6px; }
+.logc .lbl small { text-transform: none; letter-spacing: 0; font-weight: 600; color: var(--dim); margin-left: 4px; }
+.logc .delta { margin-top: -6px; }
+.logc .rpe-row { margin-top: -6px; }
+.tools { margin-top: 2px; }
+.tools .btn { min-height: 48px; font-size: 15px; }
+.hint.center { text-align: center; }
+.slide-l { animation: slideL .22s ease-out; }
+.slide-r { animation: slideR .22s ease-out; }
+@keyframes slideL { from { transform: translateX(36px); opacity: .3; } to { transform: none; opacity: 1; } }
+@keyframes slideR { from { transform: translateX(-36px); opacity: .3; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .slide-l, .slide-r { animation: none; } }
+:root[data-theme="matrix"] .steps button { border-radius: 6px; }
+:root[data-theme="matrix"] .steps button.cur { background: var(--a1); box-shadow: 0 0 14px rgba(0, 255, 65, .5); }
+.row2 .btn + .btn { margin-top: 0; }
