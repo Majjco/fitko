@@ -117,7 +117,13 @@ button:focus-visible { outline: 2px solid var(--a1); outline-offset: 2px; }
 .ft { display: block; font-size: 12px; color: var(--muted); margin-top: 3px; }
 .ex .nm .ft b { display: inline; font-size: 13px; color: var(--text); }
 .ex .nm .ft b.up { color: var(--a1); } .ex .nm .ft b.down { color: var(--down); }
-.vizsw { display: flex; align-items: center; gap: 6px; justify-content: center; margin: -4px 0 12px; font-size: 12px; color: var(--muted); }
+:root { --fill-up: rgba(212, 255, 58, .16); --fill-down: rgba(255, 107, 107, .2); --fill-same: rgba(139, 147, 161, .14); }
+.list.fills { background: transparent; border: 0; padding: 0; display: grid; gap: 6px; }
+.fillrow { background-color: var(--surface); border: 1px solid var(--line) !important; border-radius: 16px; padding: 13px 14px !important; position: relative; }
+.fillrow.D::before { content: ""; position: absolute; left: 50%; top: 10px; bottom: 10px; width: 1px; background: var(--line); }
+.fillrow .nm, .fillrow .val { position: relative; }
+.fillrow .big-chg { background: rgba(10,12,15,.72); padding: 1px 7px; border-radius: 8px; }
+.vizsw { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; justify-content: center; margin: -4px 0 12px; font-size: 12px; color: var(--muted); }
 .vizsw button { height: 30px; padding: 0 12px; border-radius: 99px; border: 1px dashed var(--dim); font-weight: 700; color: var(--muted); }
 .vizsw button.on { border-style: solid; border-color: var(--a1); color: var(--a1); }
 .delta { display: inline-block; font-family: var(--disp); font-weight: 800; font-style: italic; font-size: 20px; padding: 4px 10px; border-radius: 10px; white-space: nowrap; }
@@ -219,7 +225,7 @@ td.pr-c { color: var(--a1); font-weight: 800; }
     [1, 0, 1, 0, 0, 1, 0], [1, 0, 2, 0, 0, 1, 0], [1, 0, 1, 0, 0, 1, 0], [1, 0, 1, 0, 0, 3, 0],
   ];
 
-  var S = { tab: 'prehlad', filter: 'all', sheet: null, metric: 'e', viz: 'A' };
+  var S = { tab: 'prehlad', filter: 'all', sheet: null, metric: 'e', viz: 'D' };
   var phone = document.getElementById('phone');
 
   function spark(vals, cls) {
@@ -277,6 +283,24 @@ td.pr-c { color: var(--a1); font-weight: 800; }
     var p = x.trend === 'up' ? x.change : x.recent;
     var arrow = x.trend === 'up' ? '↑' : x.trend === 'down' ? '↓' : '→';
     var sub = showWhy && x.why ? '<span class="why">' + esc(x.why) + '</span>' : '<span>' + kg(last[0]) + ' kg × ' + last[1] + ' · 1RM ~' + Math.round(x.e[x.e.length - 1]) + ' kg</span>';
+    if (S.viz === 'D' || S.viz === 'E') {
+      // Riadok sám je pruh: pozadie sa napĺňa – D od stredu (doprava rast, doľava pokles), E zľava.
+      var w = Math.min(1, Math.abs(p) / 0.20);
+      var c = x.trend === 'up' ? ['rgba(212,255,58,.03)', 'rgba(212,255,58,.26)', '#d4ff3a'] : x.trend === 'down' ? ['rgba(255,107,107,.04)', 'rgba(255,107,107,.32)', '#ff6b6b'] : ['rgba(139,147,161,.05)', 'rgba(139,147,161,.2)', '#8b93a1'];
+      var f = function (n) { return n.toFixed(2) + '%'; };
+      var bg;
+      if (S.viz === 'D') {
+        // od stredu: rast doprava, pokles doľava; farba silnie smerom k okraju, na konci svietiaca hrana
+        var len = x.trend === 'same' ? 3 : Math.max(3, w * 50);
+        if (p >= 0) bg = 'linear-gradient(90deg, transparent 50%, ' + c[0] + ' 50%, ' + c[1] + ' ' + f(50 + len - 0.7) + ', ' + c[2] + ' ' + f(50 + len - 0.7) + ', ' + c[2] + ' ' + f(50 + len) + ', transparent ' + f(50 + len) + ')';
+        else bg = 'linear-gradient(90deg, transparent ' + f(50 - len) + ', ' + c[2] + ' ' + f(50 - len) + ', ' + c[2] + ' ' + f(50 - len + 0.7) + ', ' + c[1] + ' ' + f(50 - len + 0.7) + ', ' + c[0] + ' 50%, transparent 50%)';
+      } else {
+        var e = x.trend === 'same' ? 4 : Math.max(4, w * 100);
+        bg = 'linear-gradient(90deg, ' + c[0] + ' 0%, ' + c[1] + ' ' + f(e - 0.6) + ', ' + c[2] + ' ' + f(e - 0.6) + ', ' + c[2] + ' ' + f(e) + ', transparent ' + f(e) + ')';
+      }
+      return '<button class="ex fillrow ' + S.viz + '" data-a="ex" data-n="' + esc(x.n) + '" style="background-image:' + bg + '"><div class="nm"><b>' + esc(x.n) + '</b>' + sub + '</div>' +
+        '<div class="val"><span class="chg big-chg ' + x.trend + '">' + pct(p) + '</span><span class="sub" style="display:block;font-size:10px">' + (x.trend === 'up' ? 'za blok' : 'oproti minule') + '</span></div></button>';
+    }
     if (S.viz === 'B') {
       return '<button class="ex" data-a="ex" data-n="' + esc(x.n) + '"><div class="nm"><b>' + esc(x.n) + '</b>' + sub + barViz(x, p) + '</div>' +
         '<div class="val"><span class="chg big-chg ' + x.trend + '">' + pct(p) + '</span><span class="sub" style="display:block;font-size:10px">' + (x.trend === 'up' ? 'za blok' : 'oproti minule') + '</span></div></button>';
@@ -312,8 +336,8 @@ td.pr-c { color: var(--a1); font-weight: 800; }
         var last = x.s[x.s.length - 1], prevBest = Math.max.apply(null, x.old.concat(x.s.slice(0, -1)).map(function (p) { return p[0]; }));
         return '<button class="pr ' + (i ? 'alt' : 'grad') + '" data-a="ex" data-n="' + esc(x.n) + '">' + TROPHY + '<span class="num">' + kg(last[0]) + '</span><b>' + esc(x.n) + '</b><span>+' + kg(last[0] - prevBest) + ' kg · ' + DATES[3] + '</span></button>';
       }).join('') + '</div>' +
-      '<div class="sec"><h3>Najväčší progres</h3><button data-a="tab" data-t="cviky" data-f="up">Všetky</button></div><div class="list">' + ups.slice(0, 3).map(function (x) { return exRow(x); }).join('') + '</div>' +
-      '<div class="sec"><h3>Pozor na</h3><button data-a="tab" data-t="cviky" data-f="warn">Všetky</button></div><div class="list">' + warn.map(function (x) { return exRow(x, true); }).join('') + '</div>';
+      '<div class="sec"><h3>Najväčší progres</h3><button data-a="tab" data-t="cviky" data-f="up">Všetky</button></div><div class="list' + (S.viz === 'D' || S.viz === 'E' ? ' fills' : '') + '">' + ups.slice(0, 3).map(function (x) { return exRow(x); }).join('') + '</div>' +
+      '<div class="sec"><h3>Pozor na</h3><button data-a="tab" data-t="cviky" data-f="warn">Všetky</button></div><div class="list' + (S.viz === 'D' || S.viz === 'E' ? ' fills' : '') + '">' + warn.map(function (x) { return exRow(x, true); }).join('') + '</div>';
   }
   function cviky() {
     var n = { all: EX.length, up: 0, same: 0, down: 0 };
@@ -321,7 +345,7 @@ td.pr-c { color: var(--a1); font-weight: 800; }
     var list = EX.filter(function (x) { return S.filter === 'all' || (S.filter === 'warn' ? x.trend !== 'up' : x.trend === S.filter); });
     var f = function (k, l) { return '<button class="' + (S.filter === k ? 'on' : '') + '" data-a="filter" data-f="' + k + '">' + l + '<b>' + (k === 'warn' ? n.same + n.down : n[k]) + '</b></button>'; };
     return '<div class="filters fade">' + f('all', 'Všetky') + f('up', '↑ Hore') + f('same', '→ Stagnujú') + f('down', '↓ Klesajú') + '</div>' +
-      '<div class="list">' + list.map(function (x) { return exRow(x, x.trend !== 'up'); }).join('') + '</div>' +
+      '<div class="list' + (S.viz === 'D' || S.viz === 'E' ? ' fills' : '') + '">' + list.map(function (x) { return exRow(x, x.trend !== 'up'); }).join('') + '</div>' +
       '<p class="note">Pri raste: zmena odhadu sily (1RM) od začiatku bloku; pri stagnácii a poklese: zmena oproti minulému týždňu. 1RM ≈ váha × (1 + opakovania / 30) – porovná napr. 50 kg × 10 s 55 kg × 8.</p>';
   }
   function telo() {
@@ -367,7 +391,7 @@ td.pr-c { color: var(--a1); font-weight: 800; }
     var t = function (k, l) { return '<button class="' + (S.tab === k ? 'on' : '') + '" data-a="tab" data-t="' + k + '">' + l + '</button>'; };
     phone.innerHTML = '<div class="scroll"><div class="glow"></div><div class="eyebrow">Progres · prototyp</div><div class="h-l">Blok <span class="gtext">Comeback Nov</span></div><div class="sub">4 týždne · 11 tréningov · ukážkové dáta</div>' +
       '<nav class="seg" aria-label="Progres">' + t('prehlad', 'Prehľad') + t('cviky', 'Cviky') + t('telo', 'Telo') + '</nav>' +
-      (S.tab !== 'telo' ? '<div class="vizsw" role="group" aria-label="Štýl trendu (len v prototype)">Štýl trendu: ' + ['A', 'B', 'C'].map(function (k) { return '<button class="' + (S.viz === k ? 'on' : '') + '" data-a="viz" data-v="' + k + '">' + k + ' · ' + { A: 'štítok', B: 'pruh', C: 'stĺpčeky' }[k] + '</button>'; }).join('') + '</div>' : '') +
+      (S.tab !== 'telo' ? '<div class="vizsw" role="group" aria-label="Štýl trendu (len v prototype)">Štýl trendu: ' + ['D', 'E', 'A', 'B', 'C'].map(function (k) { return '<button class="' + (S.viz === k ? 'on' : '') + '" data-a="viz" data-v="' + k + '">' + k + ' · ' + { A: 'štítok', B: 'pruh', C: 'stĺpčeky', D: 'od stredu', E: 'zľava' }[k] + '</button>'; }).join('') + '</div>' : '') +
       (S.tab === 'prehlad' ? prehlad() : S.tab === 'cviky' ? cviky() : telo()) + '<p class="proto">Prototyp – nič sa neukladá</p></div>' +
       '<div class="tabs"><span>' + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11 12 4l9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>Dnes</span><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Týždeň</span><span class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V5M4 19h16"/><path d="m8 15 4-4 3 3 5-6"/></svg>Progres</span></div>' +
       (S.sheet ? detail(S.sheet) : '');
