@@ -125,3 +125,4 @@ cviku (váha, objem, rekord), ranná váha a fotky.
 - **Prepínanie cvikov**: očíslované krúžky hore (ťuknutie), **swipe doľava/doprava** a tlačidlá
   „‹ Predošlý / Ďalší ›“ dole. Pásiky ako v Instagram stories neboli zrozumiteľné.
 - SC-001 sa mení na: zápis celého cviku podľa plánu = 1 ťuknutie (Uložiť).
+- **FR-010** *(v20)*: na výber aj vzhľady **Ember** a **Ice** z prototypu (spolu 4: Volt, Ember, Ice, Matrix).

@@ -1,7 +1,7 @@
 // Service worker: apka sa otvorí okamžite z pamäte telefónu – aj bez signálu.
 // Pri novej verzii (zmenené CACHE) sa súbory stiahnu načisto zo servera
 // (cache: 'reload' – obíde 10-minútovú pamäť GitHub Pages) a apka sa sama reštartuje.
-const CACHE = 'fitko-v19';
+const CACHE = 'fitko-v20';
 const SHELL = ['./', 'index.html', 'app.css', 'calc.js', 'app.js',
   'fonts/barlow-700-latin.woff2', 'fonts/barlow-700-latin-ext.woff2', 'fonts/barlow-800-latin.woff2', 'fonts/barlow-800-latin-ext.woff2', 'fonts/barlow-800i-latin.woff2', 'fonts/barlow-800i-latin-ext.woff2', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-180.png'];
 

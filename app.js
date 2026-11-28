@@ -12,7 +12,7 @@
   const DAY_LONG = ['Nedeľa', 'Pondelok', 'Utorok', 'Streda', 'Štvrtok', 'Piatok', 'Sobota'];
   const RPE_VALUES = ['6', '7', '7.5', '8', '8.5', '9', '9.5', '10'];
   const HISTORY_TTL = 24 * 60 * 60 * 1000;
-  const APP_VERSION = 19; // zvýš pri každom vydaní spolu s sw.js, version.json a trener.html
+  const APP_VERSION = 20; // zvýš pri každom vydaní spolu s sw.js, version.json a trener.html
   const LS = {
     config: 'fitko.config',
     plan: 'fitko.plan',
@@ -20,10 +20,15 @@
     local: 'fitko.local',
     queue: 'fitko.queue',
     sessions: 'fitko.sessions',
-    live: 'fitko.live', // rozpracovaný tréning po sériách
-    theme: 'fitko.theme', // 'volt' | 'matrix' – len v tomto telefóne
+    live: 'fitko.live', // rozpracovaný cvik
+    theme: 'fitko.theme', // 'volt' | 'ember' | 'ice' | 'matrix' – len v tomto telefóne
   };
-  const THEMES = { volt: { name: 'Volt', color: '#0a0c0f' }, matrix: { name: 'Matrix', color: '#000000' } };
+  const THEMES = {
+    volt: { name: 'Volt', color: '#0a0c0f', desc: 'limetková energia' },
+    ember: { name: 'Ember', color: '#0d0908', desc: 'oranžový oheň' },
+    ice: { name: 'Ice', color: '#070b14', desc: 'ľadová modrá' },
+    matrix: { name: 'Matrix', color: '#000000', desc: 'zelený kód v tme' },
+  };
 
   // ---------------------------------------------------------------------------
   // Stav
@@ -1308,7 +1313,7 @@
         <div class="hint">Pošli ho trénerovi – otvorí ním svoj panel (trener.html) a pridá si ťa medzi klientov. Prihlási sa svojím menom a heslom trénera, tvoje heslo odkaz neobsahuje.</div>` : ''}
       </form>
       <div class="sec"><h3>Vzhľad</h3><span class="r muted">len v tomto telefóne</span></div>
-      <div class="looks">${Object.entries(THEMES).map(([k, t]) => `<button class="look ${currentTheme() === k ? 'on' : ''}" data-action="theme" data-theme="${k}" aria-pressed="${currentTheme() === k}"><div class="swatch ${k}">${k === 'matrix' ? '&gt;_ fitko' : ''}</div><b>${t.name}</b><span>${k === 'volt' ? 'limetková energia' : 'zelený kód v tme'}</span></button>`).join('')}</div>
+      <div class="looks">${Object.entries(THEMES).map(([k, t]) => `<button class="look ${currentTheme() === k ? 'on' : ''}" data-action="theme" data-theme="${k}" aria-pressed="${currentTheme() === k}"><div class="swatch ${k}">${k === 'matrix' ? '&gt;_ fitko' : ''}</div><b>${t.name}</b><span>${t.desc}</span></button>`).join('')}</div>
       <div class="app-version">Fitko · verzia ${APP_VERSION}</div>`;
   }
 

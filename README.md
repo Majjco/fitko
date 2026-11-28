@@ -8,8 +8,9 @@ takže ich tréner vidí v tabuľke ako predtým.
 ## Čo apka vie
 
 Vzhľad „Volt“ – tmavá športová apka s výraznými číslami, funguje aj bez signálu (vrátane písma).
-V **Nastaveniach → Vzhľad** sa dá prepnúť na **Matrix** (čierna, zelený „terminál“ a padajúci kód
-v pozadí); voľba platí len v danom telefóne. Dole tri obrazovky: **Dnes · Týždeň · Progres**.
+V **Nastaveniach → Vzhľad** sú štyri štýly: **Volt** (limetková), **Ember** (oranžovo-ružová),
+**Ice** (modro-fialová) a **Matrix** (čierna, zelený „terminál“ a padajúci kód v pozadí); voľba
+platí len v danom telefóne. Dole tri obrazovky: **Dnes · Týždeň · Progres**.
 
 - **Dnes**: karta dnešného tréningu s tlačidlom **Začať tréning** (alebo „Dnes voľno“ a najbližší
   tréning), ranná váha na jedno ťuknutie (predvyplnená poslednou, ± 0,1 kg), pás dní týždňa,
