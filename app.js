@@ -9,7 +9,7 @@
   const RPE_VALUES = ['6', '7', '7.5', '8', '8.5', '9', '9.5', '10'];
   const HISTORY_TTL = 24 * 60 * 60 * 1000;
   const C = window.FitkoCalc; // objem a progresia (calc.js)
-  const APP_VERSION = 15; // zvýš pri každej zmene (zobrazuje sa dole v apke)
+  const APP_VERSION = 16; // zvýš pri každej zmene (zobrazuje sa dole v apke)
   const LS = {
     config: 'fitko.config',
     plan: 'fitko.plan',

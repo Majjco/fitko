@@ -78,9 +78,10 @@ Prečo: tréner tabuľku používa roky a s ďalšími klientmi; apka je nadstav
 - **Súbory**: `index.html` + `app.js` + `styles.css` (klient), `trener.html` + `coach.js` +
   `coach.css` (portál), `sw.js` + `manifest.webmanifest` + `icons/` (PWA),
   `apps-script/Code.gs` (backend). Nový súbor pribudne len so zdôvodnením v pláne.
-- **Verzia apky**: pri každej zmene súborov klientskej apky sa MUSIA spolu zvýšiť
-  `APP_VERSION` v `app.js` a `CACHE` v `sw.js` (napr. 13 → 14) a nový súbor sa pridá do `SHELL`.
-  Súbory portálu sa necacheujú a idú vždy zo siete.
+- **Verzia**: pri každom vydaní sa MUSÍ to isté číslo (napr. 16 → 17) zvýšiť naraz v `app.js`
+  (`APP_VERSION`), `sw.js` (`CACHE`), `version.json` a v odkazoch `?v=` v `trener.html`; nový
+  súbor apky sa pridá do `SHELL`. Súbory panela sa necacheujú a panel sám ponúkne načítanie
+  novej verzie podľa `version.json`.
 - **Nasadenie**: GitHub Pages z vetvy `main` (root). Zmenu `Code.gs` musí vlastník ručne
   vložiť do Apps Script editora a nasadiť novú verziu; README to MUSÍ popisovať pri každej
   zmene, ktorá to vyžaduje (vrátane nových povolení, napr. Drive).
@@ -113,4 +114,4 @@ Prečo: tréner tabuľku používa roky a s ďalšími klientmi; apka je nadstav
   alebo sekcia; PATCH = spresnenie formulácie.
 - Pri každej veľkej zmene sa overí súlad so všetkými princípmi; pri malej aspoň s II, III a VI.
 
-**Version**: 1.0.0 | **Ratified**: 2026-11-28 | **Last Amended**: 2026-11-28
+**Version**: 1.0.1 | **Ratified**: 2026-11-28 | **Last Amended**: 2026-11-28

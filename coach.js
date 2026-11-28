@@ -6,6 +6,8 @@
   'use strict';
 
   const C = window.FitkoCalc;
+  // Verzia panela = ?v= v odkaze na tento skript (trener.html); porovnáva sa s version.json.
+  const PANEL_VERSION = (() => { try { return Number(new URL(document.currentScript.src).searchParams.get('v')) || 0; } catch (_) { return 0; } })();
   const KEY = { cred: 'fitko.coach', clients: 'fitko.coach.clients', settings: 'fitko.coach.settings', view: 'fitko.coach.view' };
   const draftKey = (id) => 'fitko.coach.draft.' + id;
   const seenKey = (id) => 'fitko.coach.seen.' + id;
@@ -80,6 +82,21 @@
     if (d.rpe) parts.push('RPE ' + prettyNum(d.rpe));
     return parts.join(' · ');
   }
+  // Potvrdenie priamo v paneli (namiesto systémového okna prehliadača).
+  function confirmBox(text, okLabel, cancelLabel) {
+    return new Promise((resolve) => {
+      const el = document.createElement('div');
+      el.className = 'modal-bg';
+      el.innerHTML = `<div class="modal" role="alertdialog" aria-modal="true"><p>${esc(text)}</p><div class="pacts"><button class="btn small ghost" data-m="0">${esc(cancelLabel || 'Zrušiť')}</button><button class="btn small" data-m="1">${esc(okLabel || 'Áno')}</button></div></div>`;
+      const key = (e) => { if (e.key === 'Escape') { e.stopPropagation(); done(false); } };
+      const done = (v) => { el.remove(); document.removeEventListener('keydown', key, true); resolve(v); };
+      el.addEventListener('click', (e) => { const b = e.target.closest('[data-m]'); if (b) done(b.dataset.m === '1'); else if (e.target === el) done(false); });
+      document.addEventListener('keydown', key, true);
+      document.body.appendChild(el);
+      el.querySelector('[data-m="1"]').focus();
+    });
+  }
+
   function toast(msg) {
     const el = document.getElementById('toast');
     el.textContent = msg;
@@ -615,7 +632,8 @@
       </div>
       <div class="clients">${cards}
         <button class="ccard add-client" data-a="add-client"><span class="plus">+</span><b>Pridať klienta</b><span>Vlož odkaz, ktorý ti klient poslal z apky</span></button>
-      </div>`;
+      </div>
+      <div class="app-version">Fitko · Tréner · verzia ${PANEL_VERSION || '?'}</div>`;
   }
 
   // ----- Panel klienta -----
@@ -682,7 +700,8 @@
         <span>V bunke: <b>váha</b> · série × opakovania · RPE · <b>objem cviku</b> (série × opak. × kg) a zmena oproti minulému týždňu. Svetlé = plán, ktorý ešte necvičil.</span></div>
       ${actions}</div>`;
 
-    return top + snap + ins + (dr ? draftBanners(d, dr) : '') + tb + (model.rows.length ? `<div class="gridwrap">${renderGrid(c, d, model, g, dr)}</div>` : '<div class="empty">V tabuľke zatiaľ nie je žiadny plán.</div>');
+    return top + snap + ins + (dr ? draftBanners(d, dr) : '') + tb + (model.rows.length ? `<div class="gridwrap">${renderGrid(c, d, model, g, dr)}</div>` : '<div class="empty">V tabuľke zatiaľ nie je žiadny plán.</div>') +
+      `<div class="app-version">Fitko · Tréner · verzia ${PANEL_VERSION || '?'}</div>`;
   }
 
   function draftBanners(d, dr) {
@@ -1050,7 +1069,7 @@
       case 'retry': { const cc = state.clients.find((x) => x.id === t.dataset.id); if (cc) loadClient(cc); break; }
       case 'remove': {
         const cc = state.clients.find((x) => x.id === t.dataset.id);
-        if (!cc || !window.confirm(`Odstrániť klienta ${cc.title || ''} zo zoznamu? Jeho tabuľka ostane nezmenená.`)) break;
+        if (!cc || !(await confirmBox(`Odstrániť klienta ${cc.title || ''} zo zoznamu? Jeho tabuľka ostane nezmenená.`, 'Odstrániť', 'Nechať'))) break;
         state.clients = state.clients.filter((x) => x.id !== cc.id);
         save(KEY.clients, state.clients);
         render();
@@ -1103,7 +1122,7 @@
       case 'mode': {
         const dr = getDraft(c);
         const edited = Object.values(dr.rows).some((x) => x.edited);
-        if (edited && !window.confirm('Ručné úpravy v novom týždni sa nahradia. Pokračovať?')) break;
+        if (edited && !(await confirmBox('Tvoje ručné úpravy v tomto stĺpci sa nahradia. Pokračovať?', 'Nahradiť', 'Ponechať úpravy'))) break;
         updateDraft((x) => { x.mode = t.dataset.m; x.rows = {}; });
         render();
         break;
@@ -1127,7 +1146,7 @@
       }
       case 'drop-extra': updateDraft((dr) => { dr.extra = (dr.extra || []).filter((x) => x.id !== t.dataset.x); }); render(); break;
       case 'discard':
-        if (window.confirm('Zahodiť rozpracovaný týždeň? Do tabuľky sa nič nezapísalo.')) { putDraft(c, null); render(); }
+        if (await confirmBox('Zahodiť rozpracovaný týždeň? Do tabuľky sa nič nezapísalo.', 'Zahodiť', 'Pokračovať v úpravách')) { putDraft(c, null); render(); }
         break;
       case 'send': await sendDraft(c, false); break;
       case 'retry-send': await sendDraft(c, true); break;
@@ -1149,6 +1168,25 @@
     } catch (_) { /* neplatný odkaz */ }
     history.replaceState(null, '', location.pathname);
   }
+  // Nová verzia panela: version.json sa číta vždy zo siete; pri novšej verzii ponúkni načítanie
+  // s ?v=… (obíde 10-minútovú pamäť GitHub Pages). Rozpracovaný týždeň je v localStorage, nestratí sa.
+  async function checkVersion() {
+    if (!PANEL_VERSION || document.getElementById('upd')) return;
+    try {
+      const res = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
+      const v = Number((await res.json()).version) || 0;
+      if (v <= PANEL_VERSION) return;
+      const el = document.createElement('div');
+      el.id = 'upd';
+      el.className = 'upd';
+      el.innerHTML = `<span>Je dostupná nová verzia panela (${v}).</span><button class="btn small" type="button">Načítať</button>`;
+      el.querySelector('button').addEventListener('click', () => location.replace(location.pathname + '?v=' + v));
+      document.body.appendChild(el);
+    } catch (_) { /* offline – skúsime nabudúce */ }
+  }
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkVersion(); });
+  checkVersion();
+
   const lastView = load(KEY.view, null);
   if (lastView && state.clients.some((x) => x.id === lastView)) { state.view = 'client'; state.clientId = lastView; }
   render();

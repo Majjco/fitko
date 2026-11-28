@@ -26,7 +26,7 @@ function assert(c, msg) { if (!c) throw new Error('FAIL: ' + msg); console.log('
   await page.click('[data-action=back]');
   await page.click('[data-action=settings]');
   assert(await page.isVisible('[data-action=copy-coach]'), 'nastavenia: tlačidlo odkaz pre trénera');
-  assert((await page.textContent('.app-version')).includes('15'), 'verzia 15');
+  assert((await page.textContent('.app-version')).includes('16'), 'verzia 16');
     await browser.close();
   assert(errors.length === 0, 'žiadne JS chyby' + (errors.length ? ': ' + errors.join(' | ') : ''));
 })().catch((e) => { console.error(e.message); process.exit(1); });
