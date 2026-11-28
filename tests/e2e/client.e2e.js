@@ -122,7 +122,7 @@ function assert(c, msg) { if (!c) throw new Error('FAIL: ' + msg); console.log('
   await page.click('[data-action=tab][data-tab=today]');
   await page.click('[data-action=settings]');
   assert(await page.isVisible('[data-action=copy-coach]'), 'nastavenia: odkaz pre trénera');
-  assert((await page.textContent('.app-version')).includes('22'), 'verzia 22');
+  assert((await page.textContent('.app-version')).includes('23'), 'verzia 23');
   // téma Matrix
   await page.click('[data-action=theme][data-theme=matrix]');
   assert(await page.evaluate(() => document.documentElement.dataset.theme) === 'matrix', 'téma Matrix zapnutá');

@@ -247,3 +247,12 @@ rozpracovaného týždňa.
 - Na pridanie a premenovanie cviku pri odoslaní treba rozšíriť `applyWeek` v Apps Scripte
   (zápis názvu do voľného stĺpca) – bude treba ešte raz aktualizovať skript.
 - Predvolené prahy insightov (stagnácia ±2 % za 3 týždne, pokles −5 %) sú nastaviteľné neskôr.
+
+## Vzhľad a zjednodušenie (v23, 2026-11-28)
+
+- Panel má rovnaký vzhľad ako klientska apka (Volt): tmavé pozadie so žiarou, písmo Barlow
+  Condensed na nadpisy a čísla, zeleno-tyrkysový gradient, zaoblené karty.
+- Menej textu: karta klienta = meno, tréningy týždňa, váha a krátke štítky (napr. „10 dní pauza“,
+  „↓ 1 klesá“); v paneli klienta tri dlaždice bez popisov (Tréningy, Váha so štítkom zmeny,
+  Fotky), insighty bez nadpisu, bez legendy „V bunke…“, krátka nápoveda pri naplánovanom
+  týždni, lišta „Nový T3 · 4 zmeny“.

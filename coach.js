@@ -71,10 +71,6 @@
     return withDay ? `${DAY_NAMES[date.getDay()]} ${date.getDate()}.${date.getMonth() + 1}.` : `${date.getDate()}.${date.getMonth() + 1}.`;
   }
   const daysAgo = (iso) => Math.round((new Date(new Date().toDateString()) - dateOf(iso)) / 86400000);
-  function agoText(iso) {
-    const n = daysAgo(iso);
-    return n <= 0 ? 'dnes' : n === 1 ? 'včera' : `pred ${n} dňami`;
-  }
   function doneSummary(d) {
     const parts = [];
     if (d.sets) parts.push(d.sets === 'Ok' ? 'Ok' : prettySets(d.sets));
@@ -603,35 +599,33 @@
     const wst = weightStatus(d);
     const idle = ws && ws.last ? daysAgo(ws.last) : null;
     const flags = [];
-    if (idle != null && idle >= 5) flags.push(['warn', `${idle} dní bez tréningu`]);
-    if (g.down.length) flags.push(['down', `↓ ${g.down.length} ${plural(g.down.length, 'cvik klesá', 'cviky klesajú', 'cvikov klesá')}`]);
-    if (g.fatigue.length) flags.push(['warn', `rastie únava (${g.fatigue.length})`]);
+    if (idle != null && idle >= 5) flags.push(['warn', `${idle} dní pauza`]);
+    if (g.down.length) flags.push(['down', `↓ ${g.down.length} ${plural(g.down.length, 'klesá', 'klesajú', 'klesá')}`]);
+    if (g.fatigue.length) flags.push(['warn', `únava ${g.fatigue.length}`]);
     if (g.unseen.length) flags.push(['notes', `${g.unseen.length} ${plural(g.unseen.length, 'nová poznámka', 'nové poznámky', 'nových poznámok')}`]);
     if (g.same.length) flags.push(['', `→ ${g.same.length} ${plural(g.same.length, 'stagnuje', 'stagnujú', 'stagnuje')}`]);
-    if (g.up.length) flags.push(['up', `↑ ${g.up.length} ${plural(g.up.length, 'cvik ide hore', 'cviky idú hore', 'cvikov ide hore')}`]);
+    if (g.up.length) flags.push(['up', `↑ ${g.up.length} hore`]);
     const score = (idle >= 5 ? 40 : 0) + g.down.length * 10 + g.fatigue.length * 8 + g.unseen.length * 5 + g.same.length * 2;
     const html = `<button class="ccard" data-a="open" data-id="${c.id}">${head}
       <div class="ccard-stats">
-        ${ws ? `<span><b>${ws.done}/${ws.total}</b> ${plural(ws.total, 'tréning', 'tréningy', 'tréningov')} v T${ws.w.n}</span>` : ''}
-        ${ws && ws.last ? `<span>naposledy <b>${esc(agoText(ws.last))}</b></span>` : ''}
-        ${wst ? `<span><b>${esc(fmtKg(wst.last.kg))}</b> kg ráno</span>` : ''}
+        ${ws ? `<div class="st"><b class="num">${ws.done}<small>/${ws.total}</small></b><span>T${ws.w.n}</span></div>` : ''}
+        ${wst ? `<div class="st"><b class="num">${esc(fmtKg(wst.last.kg))}<small> kg</small></b><span>váha</span></div>` : ''}
       </div>
-      <div class="flags">${flags.map(([cls, t]) => `<span class="flag ${cls}">${esc(t)}</span>`).join('') || '<span class="flag">zatiaľ málo dát</span>'}</div>
+      ${flags.length ? `<div class="flags">${flags.map(([cls, t]) => `<span class="flag ${cls}">${esc(t)}</span>`).join('')}</div>` : ''}
     </button>`;
     return { score, html };
   }
 
   function renderClients() {
     const cards = state.clients.map(clientCard).sort((a, b) => b.score - a.score).map((x) => x.html).join('');
-    const now = new Date();
     return `
       <div class="topbar">
-        <h1>Moji klienti<span class="sub">${DAY_NAMES[now.getDay()]} ${now.getDate()}. ${now.getMonth() + 1}. · kto potrebuje pozornosť, je prvý</span></h1>
+        <h1>Klienti</h1>
         <button class="icon-btn" data-a="reload-all" aria-label="Obnoviť">${ICON.refresh}</button>
         <button class="icon-btn" data-a="logout" aria-label="Odhlásiť">${ICON.logout}</button>
       </div>
       <div class="clients">${cards}
-        <button class="ccard add-client" data-a="add-client"><span class="plus">+</span><b>Pridať klienta</b><span>Vlož odkaz, ktorý ti klient poslal z apky</span></button>
+        <button class="ccard add-client" data-a="add-client"><span class="plus">+</span><b>Pridať klienta</b></button>
       </div>
       <div class="app-version">Fitko · Tréner · verzia ${PANEL_VERSION || '?'}</div>`;
   }
@@ -651,7 +645,7 @@
     const d = st.d;
     const model = d ? buildModel(d) : null;
     const top = `<div class="topbar phead"><button class="icon-btn" data-a="clients" aria-label="Späť na klientov">${ICON.back}</button>
-      <h1>${esc((d && d.title) || c.title || 'Klient')}<span class="sub">${d ? `${esc(d.sheet.trim())} · ${model.cols.length} ${plural(model.cols.length, 'týždeň', 'týždne', 'týždňov')}` : ''}${st.loading ? ' · načítavam…' : ''}</span></h1>
+      <h1>${esc((d && d.title) || c.title || 'Klient')}<span class="sub">${d ? esc(d.sheet.trim()) : ''}${st.loading ? ' · načítavam…' : ''}</span></h1>
       <button class="icon-btn" data-a="reload" aria-label="Obnoviť">${ICON.refresh}</button></div>`;
     if (!d) return top + (st.error ? `<div class="banner err"><div>${esc(st.error)}</div><button data-a="reload">Skúsiť znova</button></div>` : '<div class="empty"><div class="spinner"></div>Načítavam tabuľku…</div>');
     const g = insightsOf(c, d, model);
@@ -661,27 +655,24 @@
     const ws = weekStatus(d);
     const wst = weightStatus(d);
     const lastPhoto = d.photos[d.photos.length - 1];
+    const wd = wst && wst.diff != null ? Math.round(wst.diff * 10) / 10 : null;
     const snap = `<div class="snap">
-      <div class="tile"><span class="tile-k">Tento týždeň${ws ? ` (T${ws.w.n})` : ''}</span>
-        <span class="tile-v">${ws ? `${ws.done}<small>/${ws.total} ${plural(ws.total, 'tréning', 'tréningy', 'tréningov')}</small>` : '–'}</span>
-        <span class="tile-s">${ws ? (ws.next ? `čaká Deň ${ws.next.n}${ws.next.date ? ' · ' + esc(formatDate(ws.next.date)) : ''}` : 'všetko odcvičené') + (ws.last ? ` · naposledy ${esc(agoText(ws.last))}` : '') : 'bez plánu'}</span></div>
-      <button class="tile" data-a="body"><span class="tile-k">Ranná váha</span>
-        <span class="tile-v">${wst ? `${esc(fmtKg(wst.last.kg))}<small> kg · ${esc(formatDate(wst.last.date, false))}</small>` : '–'}</span>
-        <span class="tile-s">${wst && wst.diff != null ? `<b>${wst.diff > 0 ? '+' : wst.diff < 0 ? '−' : '±'}${esc(fmtKg(Math.abs(Math.round(wst.diff * 10) / 10)))} kg</b> za 7 dní` : wst ? 'málo vážení' : 'klient zatiaľ nezapisuje'}</span>
+      <div class="tile hero"><div class="in"><span class="tile-k">Tréningy${ws ? ` · T${ws.w.n}` : ''}</span>
+        <span class="tile-v gtext">${ws ? `${ws.done}<small>/${ws.total}</small>` : '–'}</span></div></div>
+      <button class="tile" data-a="body"><div class="row"><span class="tile-k">Váha</span>${wd ? `<span class="tchip ${wd < 0 ? 'dn' : ''}">${wd > 0 ? '↑ +' : '↓ −'}${esc(fmtKg(Math.abs(wd)))} kg</span>` : ''}</div>
+        <span class="tile-v">${wst ? `${esc(fmtKg(wst.last.kg))}<small> kg</small>` : '–'}</span>
         ${wst ? sparkline(wst.recent) : ''}</button>
-      <button class="tile" data-a="body"><span class="tile-k">Fotky progresu</span>
-        <span class="tile-v">${lastPhoto ? `${esc(formatDate(lastPhoto.date, false))}<small> · ${lastPhoto.count} ${plural(lastPhoto.count, 'fotka', 'fotky', 'fotiek')}</small>` : '–'}</span>
-        <span class="tile-s">${lastPhoto ? `spolu ${d.photos.length}× · otvoriť` : 'zatiaľ žiadne'}</span></button>
+      <button class="tile" data-a="body"><div class="row"><span class="tile-k">Fotky</span>${lastPhoto ? `<span class="tchip">${lastPhoto.count}</span>` : ''}</div>
+        <span class="tile-v">${lastPhoto ? esc(formatDate(lastPhoto.date, false)) : '–'}</span></button>
     </div>`;
 
     const chip = (k, cls, label) => (g[k].length ? `<button class="ins ${cls} ${state.focus === k ? 'on' : ''}" data-a="focus" data-k="${k}"><b>${k === 'notes' ? g.unseen.length : g[k].length}</b> ${label}</button>` : '');
-    const ins = `<div class="insights"><span class="lbl">Na prvý pohľad</span>
-      ${chip('up', 'up', plural(g.up.length, 'cvik ide hore', 'cviky idú hore', 'cvikov ide hore'))}
+    const ins = `<div class="insights">
+      ${chip('up', 'up', 'hore')}
       ${chip('same', 'same', plural(g.same.length, 'stagnuje', 'stagnujú', 'stagnuje'))}
       ${chip('down', 'down', plural(g.down.length, 'klesá', 'klesajú', 'klesá'))}
-      ${chip('fatigue', 'warn', 'rastie únava (RPE pri rovnakej váhe)')}
-      ${chip('notes', 'note', plural(g.unseen.length, 'nová poznámka klienta', 'nové poznámky klienta', 'nových poznámok klienta'))}
-      ${!g.up.length && !g.same.length && !g.down.length ? '<span class="muted">Trendy sa ukážu po 2 odcvičených týždňoch.</span>' : ''}
+      ${chip('fatigue', 'warn', 'únava')}
+      ${chip('notes', 'note', plural(g.unseen.length, 'nová poznámka', 'nové poznámky', 'nových poznámok'))}
     </div>`;
 
     const lp = lastPlannedIdx(d);
@@ -696,8 +687,7 @@
         : `<button class="btn add-week" data-a="add-week">+ Pridať týždeň ${nextN}</button>`;
     }
     const tb = `<div class="toolbar"><div class="legend">
-        ${!dr && unstarted ? `<div class="plan-hint"><b>T${lpW.n} je naplánovaný, ${who} ho ešte necvičil.</b> Uprav ho tlačidlom „Upraviť T${lpW.n}“ (všetky cviky naraz, aj s návrhom podľa výkonov) alebo klikni na jednu bunku. Týždeň ${nextN} pridáš, keď bude T${lpW.n} za vami.</div>` : ''}
-        <span>V bunke: <b>váha</b> · série × opakovania · RPE · <b>objem cviku</b> (série × opak. × kg) a zmena oproti minulému týždňu. Svetlé = plán, ktorý ešte necvičil.</span></div>
+        ${!dr && unstarted ? `<div class="plan-hint"><b>T${lpW.n} je naplánovaný</b> – ${who} ho ešte necvičil.</div>` : ''}</div>
       ${actions}</div>`;
 
     return top + snap + ins + (dr ? draftBanners(d, dr) : '') + tb + (model.rows.length ? `<div class="gridwrap">${renderGrid(c, d, model, g, dr)}</div>` : '<div class="empty">V tabuľke zatiaľ nie je žiadny plán.</div>') +
@@ -770,8 +760,8 @@
     const dw = wNew && wOld && wNew.lo && wOld.lo ? wNew.lo - wOld.lo : 0;
     const lastDone = dRow.src ? C.totalKg(C.volume(dRow.e.name, dRow.src.planned, dRow.src.done)) : 0;
     const nv = C.totalKg(C.volume(dRow.e.name, f, f));
-    const volLine = nv ? `<span class="v">objem <b>${esc(C.formatVolume(nv))}</b>${lastDone ? ` <span class="p ${nv > lastDone * 1.005 ? 'up' : nv < lastDone * 0.995 ? 'down' : ''}">${esc(C.formatPct(nv / lastDone - 1))}</span> vs. T${dRow.src.week}` : ''}</span>` : '';
-    const why = dRow.st.edited ? '<span class="why">upravené tebou</span>'
+    const volLine = nv ? `<span class="v">objem <b>${esc(C.formatVolume(nv))}</b>${lastDone ? ` <span class="p ${nv > lastDone * 1.005 ? 'up' : nv < lastDone * 0.995 ? 'down' : ''}">${esc(C.formatPct(nv / lastDone - 1))}</span>` : ''}</span>` : '';
+    const why = dRow.st.edited ? '<span class="why">upravené</span>'
       : dr.mode === 'copy' ? `<span class="why">${dr.edit ? 'aktuálny plán' : `kópia T${dr.from}`}</span>`
       : `<span class="why ${dRow.s.review ? 'rev' : ''}" title="${esc(dRow.s.reason)}">${dw ? `<span class="d ${dw > 0 ? 'up' : 'down'}">${dw > 0 ? '+' : '−'}${esc(fmtKg(Math.abs(dw)))} kg</span> ` : ''}${esc(shortWhy(dRow, settingsOf(d).pct))}</span>`;
     const inp = (k, cls, label, ph) => `<input id="${id}-${k}" class="${cls} ${String(f[k] || '') !== String(base[k] || '') ? 'chg' : ''}" data-dk="${key}" data-f="${k}" value="${esc(f[k] || '')}" placeholder="${esc(ph)}" aria-label="${esc(label + ' – ' + nice(dRow.e.name))}" autocomplete="off">`;
@@ -813,7 +803,7 @@
         const cls = focusSet ? (focusSet.includes(r.key) ? 'hl' : 'dim') : '';
         const latestCell = allCols.slice().reverse().map(({ w }) => r.cells[w.n]).find(Boolean);
         const t = r.trend;
-        const trendHtml = t.kind === 'none' ? '' : `<span class="trend ${t.kind}" title="${esc(t.why)}">${t.kind === 'up' ? '↑ ide hore' : t.kind === 'down' ? '↓ klesá' : '→ stagnuje'}</span>`;
+        const trendHtml = t.kind === 'none' ? '' : `<span class="trend ${t.kind}" title="${esc(t.why)}">${t.kind === 'up' ? '↑ hore' : t.kind === 'down' ? '↓ klesá' : '→ stagnuje'}</span>`;
         const dRow = dByRow.get(r.key);
         return `<tr class="${cls}"><th class="exc"><button class="exname" data-a="ex" data-r="${esc(r.key)}">${esc(nice(r.name))}</button>
           <div class="exmeta">${trendHtml}${t.fatigue ? '<span class="trend down" title="RPE rastie pri rovnakej váhe">únava</span>' : ''}<span>${esc(prettySets(latestCell.e.planned.sets))}${latestCell.e.planned.rpe ? ' · RPE ' + esc(prettyNum(latestCell.e.planned.rpe)) : ''}</span></div></th>
@@ -839,7 +829,7 @@
 
   function barText(c, d, dr) {
     const n = draftChanges(draftRows(c, d, dr), dr);
-    return `${n} ${plural(n, 'zmena', 'zmeny', 'zmien')} ${dr.edit ? 'oproti aktuálnemu plánu' : `oproti T${dr.from}`} · uložené v tomto prehliadači`;
+    return `${n} ${plural(n, 'zmena', 'zmeny', 'zmien')}`;
   }
   function renderBar() {
     let bar = document.getElementById('bar');
@@ -852,7 +842,7 @@
     const target = dr.target || expectedTarget(d, d.weeks.findIndex((w) => w.n === dr.from));
     const failed = dr.failed && dr.failed.length;
     const busy = state.busy.send;
-    bar.innerHTML = `<div class="bar-in"><div class="info"><b>${failed ? `Týždeň ${target}: ${dr.failed.length} ${plural(dr.failed.length, 'cvik čaká', 'cviky čakajú', 'cvikov čaká')} na odoslanie` : dr.edit ? `Upravuješ týždeň ${target}` : `Týždeň ${target} je rozpracovaný`}</b><span id="bar-sub">${esc(barText(c, d, dr))}</span></div>
+    bar.innerHTML = `<div class="bar-in"><div class="info"><b>${failed ? `T${target}: ${dr.failed.length} ${plural(dr.failed.length, 'cvik čaká', 'cviky čakajú', 'cvikov čaká')}` : dr.edit ? `Úprava T${target}` : `Nový T${target}`}</b><span id="bar-sub">${esc(barText(c, d, dr))}</span></div>
       <button class="btn ghost" data-a="discard" ${busy ? 'disabled' : ''}>Zahodiť</button>
       <button class="btn" data-a="${failed ? 'retry-send' : 'send'}" ${busy || !d.settings ? 'disabled' : ''}>${busy ? 'Odosielam…' : failed ? 'Odoslať chýbajúce' : dr.edit ? 'Uložiť a poslať klientovi' : 'Odoslať klientovi'}</button></div>`;
   }
@@ -935,7 +925,7 @@
     const step = stepFor(d, r.name);
     return `<div class="drawer-bg" data-a="close-drawer"></div><aside class="drawer" role="dialog" aria-label="Detail cviku">
       <div class="drawer-head"><h2>${esc(nice(r.name))}</h2><button class="icon-btn" data-a="close-drawer" aria-label="Zavrieť">${ICON.close}</button></div>
-      <div class="flags">${t.kind !== 'none' ? `<span class="flag ${t.kind}">${t.kind === 'up' ? '↑ ide hore' : t.kind === 'down' ? '↓ klesá' : '→ stagnuje'} · ${esc(t.why)}</span>` : ''}${t.fatigue ? '<span class="flag warn">rastie únava</span>' : ''}</div>
+      <div class="flags">${t.kind !== 'none' ? `<span class="flag ${t.kind}">${t.kind === 'up' ? '↑ hore' : t.kind === 'down' ? '↓ klesá' : '→ stagnuje'} · ${esc(t.why)}</span>` : ''}${t.fatigue ? '<span class="flag warn">rastie únava</span>' : ''}</div>
       <section><h3>Váha (kg)</h3>${chartSvg(wPts)}</section>
       <section><h3>Objem cviku (kg)</h3>${chartSvg(vPts, { vol: true })}</section>
       <p class="hint">${hist && hist.loading ? 'Načítavam staršie bloky…' : hist && hist.sheets.length ? `Vrátane starších blokov (${esc(hist.sheets.map((s) => s.name.trim()).join(', '))}) – svetlé body, zvislá čiara = nový blok.` : 'Aktuálny blok.'}</p>
