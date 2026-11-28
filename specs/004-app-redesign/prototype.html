@@ -1,0 +1,489 @@
+<title>Fitko redizajn – prototyp</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,600;0,700;0,800;1,800&family=Inter:wght@400;500;600;700;800&display=swap">
+<style>
+/* Jeden stĺpec telefónu; tréning je režim na celú obrazovku. Tri farebné smery cez data-look. */
+:root {
+  --bg: #0a0c0f; --bg2: #050608; --surface: #14171c; --surface-2: #1c2027; --line: #262b34;
+  --text: #f4f6f8; --muted: #8b93a1; --dim: #5b6372;
+  --a1: #d4ff3a; --a2: #3affc4; --ink: #0b1100; --glow: rgba(212,255,58,.35);
+  --ok: #4ade80; --down: #ff6b6b; --warn: #ffc24a;
+  --disp: "Barlow Condensed", "Arial Narrow", system-ui, sans-serif;
+  --sans: "Inter", -apple-system, system-ui, "Segoe UI", sans-serif;
+  --r: 22px;
+  color-scheme: dark;
+}
+:root[data-look="ember"] { --bg: #0d0908; --bg2: #070504; --surface: #1a1311; --surface-2: #241a17; --line: #33251f; --muted: #a39088; --dim: #6e5c55;
+  --a1: #ff7a2f; --a2: #ff2d6f; --ink: #1a0600; --glow: rgba(255,106,47,.4); }
+:root[data-look="ice"] { --bg: #070b14; --bg2: #04070d; --surface: #0f1726; --surface-2: #162034; --line: #1f2c44; --muted: #8698b8; --dim: #55658a;
+  --a1: #45e3ff; --a2: #8a6bff; --ink: #001018; --glow: rgba(69,227,255,.35); }
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg2); color: var(--text); font-family: var(--sans); font-size: 15px; line-height: 1.4; font-variant-numeric: tabular-nums; -webkit-font-smoothing: antialiased; }
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--a1); outline-offset: 2px; }
+.grad { background: linear-gradient(120deg, var(--a1), var(--a2)); }
+.gtext { background: linear-gradient(120deg, var(--a1), var(--a2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+
+/* Rám: na počítači telefón v strede, v mobile celá obrazovka */
+.shell { min-height: 100%; display: grid; place-items: start center; padding-left: max(0px, env(safe-area-inset-left, 0px)); padding-right: max(0px, env(safe-area-inset-right, 0px)); }
+.looks { position: fixed; z-index: 90; top: calc(env(safe-area-inset-top, 0px) + 10px); left: 50%; transform: translateX(-50%); display: flex; gap: 4px; padding: 4px; border-radius: 99px; background: rgba(20,22,26,.85); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,.08); font-size: 12px; }
+.looks span { padding: 6px 8px 6px 10px; color: #9aa2b0; font-weight: 600; }
+.looks button { padding: 6px 12px; border-radius: 99px; font-weight: 700; color: #c9ced8; }
+.looks button.on { background: #f4f6f8; color: #0a0c0f; }
+.phone { position: relative; width: 100%; max-width: 430px; min-height: 100vh; background: var(--bg); overflow: hidden; }
+@media (min-width: 700px) {
+  .shell { padding-top: 64px; padding-bottom: 40px; }
+  .phone { min-height: 860px; height: 860px; border-radius: 46px; border: 10px solid #1a1c20; box-shadow: 0 40px 120px rgba(0,0,0,.6); }
+  .scroll { height: 100%; }
+}
+.scroll { height: 100vh; overflow-y: auto; padding: calc(env(safe-area-inset-top, 0px) + 58px) 18px 110px; scrollbar-width: none; }
+.scroll::-webkit-scrollbar { display: none; }
+@media (min-width: 700px) { .scroll { height: 840px; padding-top: 58px; } }
+.bg-glow { position: absolute; inset: -20% -40% auto; height: 420px; background: radial-gradient(closest-side, var(--glow), transparent 70%); opacity: .55; pointer-events: none; filter: blur(10px); }
+
+/* Typografia */
+.eyebrow { font-size: 12px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.h-xl { font-family: var(--disp); font-weight: 800; font-size: 46px; line-height: .95; letter-spacing: .005em; text-transform: uppercase; margin: 0; }
+.h-l { font-family: var(--disp); font-weight: 800; font-size: 30px; line-height: 1; text-transform: uppercase; margin: 0; }
+.num { font-family: var(--disp); font-weight: 800; font-style: italic; letter-spacing: .01em; }
+
+/* Domov */
+.top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
+.top .avatar { width: 40px; height: 40px; border-radius: 50%; background: var(--surface-2); display: grid; place-items: center; font-weight: 800; border: 1px solid var(--line); }
+.streak { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; font-size: 13px; padding: 6px 10px; border-radius: 99px; background: var(--surface); border: 1px solid var(--line); }
+.streak svg { width: 15px; height: 15px; color: var(--a1); }
+.hero { position: relative; border-radius: 28px; padding: 2px; margin: 8px 0 14px; }
+.hero-in { border-radius: 26px; background: linear-gradient(160deg, var(--surface-2), var(--surface) 60%); padding: 20px 20px 18px; position: relative; overflow: hidden; }
+.hero-in::after { content: ""; position: absolute; right: -60px; top: -60px; width: 220px; height: 220px; border-radius: 50%; background: radial-gradient(closest-side, var(--glow), transparent); }
+.hero .meta { display: flex; gap: 14px; color: var(--muted); font-size: 13px; font-weight: 600; margin: 10px 0 14px; }
+.hero .meta b { color: var(--text); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 18px; position: relative; z-index: 1; }
+.chip { font-size: 12px; font-weight: 600; padding: 5px 10px; border-radius: 99px; background: rgba(255,255,255,.06); color: #d7dbe2; }
+.cta { position: relative; z-index: 1; width: 100%; height: 60px; border-radius: 18px; color: var(--ink); font-family: var(--disp); font-weight: 800; font-size: 24px; letter-spacing: .04em; text-transform: uppercase; display: flex; align-items: center; justify-content: center; gap: 10px; box-shadow: 0 12px 30px var(--glow); }
+.cta svg { width: 22px; height: 22px; }
+.cta:active { transform: scale(.98); }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 16px; margin-bottom: 12px; }
+.tip { display: flex; gap: 12px; align-items: flex-start; }
+.tip .ic { width: 38px; height: 38px; flex: none; border-radius: 12px; display: grid; place-items: center; color: var(--ink); }
+.tip .ic svg { width: 20px; height: 20px; }
+.tip b { display: block; font-size: 15px; margin-bottom: 2px; }
+.tip span { color: var(--muted); font-size: 13px; }
+.weigh { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.weigh .lbl { flex: 1 1 100%; }
+.weigh .stepper { flex: 1; justify-content: space-between; }
+.weigh .btn.acc { height: 48px; min-width: 64px; }
+.weigh .lbl b { display: block; }
+.weigh .lbl span { color: var(--muted); font-size: 13px; }
+.stepper { display: flex; align-items: center; gap: 4px; background: var(--bg); border: 1px solid var(--line); border-radius: 14px; padding: 4px; }
+.stepper button { width: 38px; height: 38px; border-radius: 10px; background: var(--surface-2); font-size: 20px; font-weight: 700; }
+.stepper .v { min-width: 70px; text-align: center; font-size: 26px; }
+.stepper .v small { font-family: var(--sans); font-style: normal; font-size: 12px; color: var(--muted); font-weight: 600; margin-left: 2px; }
+.btn { height: 46px; padding: 0 16px; border-radius: 14px; font-weight: 800; background: var(--surface-2); border: 1px solid var(--line); }
+.btn.acc { color: var(--ink); border: 0; background: linear-gradient(120deg, var(--a1), var(--a2)); }
+.week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; margin: 6px 0 14px; }
+.wd { display: grid; justify-items: center; gap: 6px; font-size: 11px; color: var(--muted); font-weight: 700; }
+.wd i { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; font-style: normal; font-size: 13px; color: var(--muted); background: var(--surface); border: 1px solid var(--line); }
+.wd.done i { background: var(--surface-2); color: var(--a1); border-color: transparent; }
+.wd.today i { color: var(--ink); border: 0; box-shadow: 0 0 0 3px var(--bg), 0 0 0 5px var(--a1); }
+.wd.off i { opacity: .45; }
+.sec { display: flex; align-items: baseline; justify-content: space-between; margin: 20px 2px 10px; }
+.sec h3 { font-family: var(--disp); font-weight: 800; font-size: 20px; text-transform: uppercase; letter-spacing: .03em; margin: 0; }
+.sec a, .sec button { color: var(--a1); font-size: 13px; font-weight: 700; }
+
+/* Spodná lišta */
+.tabs { position: absolute; left: 12px; right: 12px; bottom: calc(env(safe-area-inset-bottom, 0px) + 12px); z-index: 20; display: grid; grid-template-columns: repeat(3, 1fr); background: rgba(20,23,28,.82); backdrop-filter: blur(16px); border: 1px solid var(--line); border-radius: 24px; padding: 6px; }
+@media (max-width: 699px) { .tabs { position: fixed; max-width: 406px; margin: 0 auto; } }
+.tabs button { height: 54px; border-radius: 18px; display: grid; place-items: center; gap: 2px; font-size: 11px; font-weight: 700; color: var(--muted); padding-top: 6px; }
+.tabs svg { width: 22px; height: 22px; }
+.tabs button.on { color: var(--text); background: var(--surface-2); }
+.tabs button.on svg { color: var(--a1); }
+
+/* Týždeň */
+.dayc { display: flex; gap: 14px; align-items: center; }
+.dayc .n { width: 52px; height: 52px; border-radius: 16px; display: grid; place-items: center; background: var(--surface-2); font-size: 26px; flex: none; }
+.dayc.done .n { color: var(--a1); }
+.dayc.today .n { color: var(--ink); }
+.dayc .t { flex: 1; min-width: 0; }
+.dayc .t b { display: block; font-size: 16px; }
+.dayc .t span { color: var(--muted); font-size: 13px; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.badge { font-size: 11px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; padding: 4px 8px; border-radius: 8px; background: var(--surface-2); color: var(--muted); }
+.badge.ok { color: var(--ok); }
+.badge.now { color: var(--ink); }
+
+/* Tréning */
+.wo { position: absolute; inset: 0; z-index: 40; background: var(--bg); display: flex; flex-direction: column; }
+.wo-top { padding: calc(env(safe-area-inset-top, 0px) + 54px) 18px 10px; display: grid; gap: 12px; }
+@media (min-width: 700px) { .wo-top { padding-top: 54px; } }
+.wo-bar { display: flex; align-items: center; gap: 10px; }
+.wo-bar .x { width: 40px; height: 40px; border-radius: 12px; background: var(--surface); display: grid; place-items: center; }
+.wo-bar .x svg { width: 20px; height: 20px; }
+.wo-bar .clock { margin-left: auto; font-size: 22px; color: var(--muted); }
+.segs { display: flex; gap: 4px; }
+.segs i { flex: 1; height: 5px; border-radius: 9px; background: var(--surface-2); }
+.segs i.done { background: var(--dim); }
+.segs i.cur { background: linear-gradient(90deg, var(--a1), var(--a2)); }
+.wo-body { flex: 1; overflow-y: auto; padding: 4px 18px 140px; scrollbar-width: none; }
+.wo-body::-webkit-scrollbar { display: none; }
+.exn { margin: 6px 0 4px; }
+.coachnote { display: inline-flex; gap: 8px; align-items: center; margin: 8px 0 12px; padding: 8px 12px; border-radius: 12px; background: rgba(255,194,74,.1); color: var(--warn); font-size: 13px; font-weight: 600; }
+.cmp { display: grid; grid-template-columns: auto 1fr 1fr 1fr; gap: 4px 12px; align-items: baseline; background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 12px 14px; margin-bottom: 10px; }
+.cmp .k { font-size: 11px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
+.cmp .v { font-size: 22px; }
+.cmp .v.last { color: var(--muted); font-size: 20px; }
+.ptip { display: flex; gap: 10px; align-items: center; padding: 10px 12px; border-radius: 14px; background: color-mix(in srgb, var(--a1) 10%, transparent); border: 1px solid color-mix(in srgb, var(--a1) 30%, transparent); font-size: 13px; font-weight: 600; margin-bottom: 14px; }
+.ptip svg { width: 18px; height: 18px; color: var(--a1); flex: none; }
+.set { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 18px; background: var(--surface); border: 1px solid var(--line); margin-bottom: 8px; }
+.set .sn { width: 32px; height: 32px; border-radius: 10px; display: grid; place-items: center; background: var(--surface-2); font-weight: 800; font-size: 14px; flex: none; }
+.set.done .sn { color: var(--ink); }
+.set .sv { flex: 1; font-size: 24px; }
+.set .sv small { font-family: var(--sans); font-style: normal; font-size: 12px; color: var(--muted); font-weight: 600; }
+.set.done .sv { color: var(--muted); }
+.set .pr { font-size: 11px; font-weight: 800; padding: 3px 7px; border-radius: 7px; color: var(--ink); text-transform: uppercase; letter-spacing: .05em; }
+.set.cur { border-color: var(--a1); background: linear-gradient(180deg, color-mix(in srgb, var(--a1) 7%, var(--surface)), var(--surface)); display: grid; gap: 14px; padding: 14px; }
+.set.cur .row { display: flex; align-items: center; gap: 12px; }
+.ctrl { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.ctrl .lbl { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 6px; }
+.big { display: flex; align-items: center; justify-content: space-between; background: var(--bg); border: 1px solid var(--line); border-radius: 16px; padding: 6px; }
+.big button { width: 44px; height: 52px; border-radius: 12px; background: var(--surface-2); font-size: 24px; font-weight: 700; }
+.big .v { font-size: 38px; line-height: 1; }
+.setdone { height: 58px; border-radius: 16px; color: var(--ink); font-family: var(--disp); font-weight: 800; font-size: 22px; text-transform: uppercase; letter-spacing: .05em; display: flex; align-items: center; justify-content: center; gap: 8px; }
+.setdone svg { width: 22px; height: 22px; }
+.rpe { display: grid; gap: 10px; background: var(--surface); border: 1px solid var(--a1); border-radius: 18px; padding: 14px; }
+.rpe-row { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+.rpe-row button { height: 48px; border-radius: 12px; background: var(--surface-2); font-family: var(--disp); font-weight: 800; font-style: italic; font-size: 22px; }
+.rpe-row button.on { color: var(--ink); }
+.rpe input { background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 12px; color: var(--text); font: inherit; }
+.wo-foot { position: absolute; left: 0; right: 0; bottom: 0; padding: 12px 18px calc(env(safe-area-inset-bottom, 0px) + 16px); background: linear-gradient(transparent, var(--bg) 35%); }
+
+/* Pauza */
+.rest { position: absolute; inset: 0; z-index: 60; background: color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter: blur(14px); display: grid; place-items: center; text-align: center; padding: 24px; }
+.ring { position: relative; width: 260px; height: 260px; margin: 10px auto 18px; }
+.ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+.ring .bgc { fill: none; stroke: var(--surface-2); stroke-width: 12; }
+.ring .fg { fill: none; stroke: url(#rg); stroke-width: 12; stroke-linecap: round; transition: stroke-dashoffset .9s linear; }
+.ring .t { position: absolute; inset: 0; display: grid; place-items: center; align-content: center; }
+.ring .t .num { font-size: 76px; line-height: 1; }
+.ring .t span { color: var(--muted); font-weight: 700; font-size: 13px; letter-spacing: .1em; text-transform: uppercase; }
+.rest .next { color: var(--muted); margin-bottom: 18px; }
+.rest .next b { color: var(--text); }
+.rest .acts { display: flex; gap: 10px; justify-content: center; }
+.rest.end .ring .t .num { color: var(--a1); }
+
+/* Súhrn */
+.sum-hero { text-align: center; padding: 10px 0 6px; position: relative; }
+.medal { width: 92px; height: 92px; border-radius: 30px; margin: 0 auto 14px; display: grid; place-items: center; color: var(--ink); transform: rotate(-6deg); box-shadow: 0 16px 40px var(--glow); }
+.medal svg { width: 46px; height: 46px; }
+.tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 16px 0; }
+.tile { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 12px; text-align: left; }
+.tile .num { font-size: 34px; line-height: 1; }
+.tile .k { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; margin-top: 4px; }
+.prc { display: flex; gap: 12px; align-items: center; padding: 14px; border-radius: 18px; margin-bottom: 8px; color: var(--ink); }
+.prc svg { width: 26px; height: 26px; flex: none; }
+.prc b { display: block; font-size: 15px; }
+.prc span { font-size: 13px; font-weight: 600; opacity: .8; }
+.srow { display: flex; gap: 10px; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.srow:last-child { border-bottom: 0; }
+.srow .nm { flex: 1; min-width: 0; }
+.srow .nm b { display: block; font-size: 15px; }
+.srow .nm span { color: var(--muted); font-size: 13px; }
+.srow .vol { text-align: right; font-size: 13px; color: var(--muted); }
+.srow .vol b { display: block; color: var(--text); font-size: 15px; }
+.up { color: var(--ok); font-weight: 800; } .down { color: var(--down); font-weight: 800; }
+
+/* Progres */
+.pex { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); width: 100%; text-align: left; }
+.pex:last-child { border-bottom: 0; }
+.pex .nm { flex: 1; min-width: 0; }
+.pex .nm b { display: block; font-size: 15px; }
+.pex .nm span { color: var(--muted); font-size: 13px; }
+.spark { width: 76px; height: 30px; flex: none; }
+.spark path { fill: none; stroke: var(--a1); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.trend { font-size: 11px; font-weight: 800; padding: 3px 8px; border-radius: 99px; background: var(--surface-2); white-space: nowrap; }
+.trend.up { color: var(--ok); } .trend.down { color: var(--down); } .trend.same { color: var(--muted); }
+.chart { width: 100%; height: auto; display: block; }
+.chart .gl { stroke: var(--line); }
+.chart .ax { fill: var(--muted); font-size: 10px; font-family: var(--sans); }
+.chart .ln { fill: none; stroke: url(#cg); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.chart .ar { fill: url(#ca); }
+.chart .pt { fill: var(--bg); stroke: var(--a1); stroke-width: 2.5; }
+.sheet-bg { position: absolute; inset: 0; z-index: 70; background: rgba(0,0,0,.5); display: flex; align-items: flex-end; }
+.sheet { width: 100%; max-height: 85%; overflow-y: auto; background: var(--surface); border-radius: 28px 28px 0 0; padding: 12px 18px calc(env(safe-area-inset-bottom, 0px) + 24px); border-top: 1px solid var(--line); }
+.grab { width: 40px; height: 5px; border-radius: 9px; background: var(--line); margin: 0 auto 14px; }
+.toast { position: absolute; left: 50%; bottom: 100px; transform: translateX(-50%); z-index: 99; background: var(--text); color: var(--bg); padding: 10px 16px; border-radius: 12px; font-weight: 700; font-size: 14px; white-space: nowrap; }
+.pop { animation: pop .35s cubic-bezier(.2,1.4,.4,1); }
+@keyframes pop { from { transform: scale(.85); opacity: .4; } to { transform: scale(1); opacity: 1; } }
+.rise { animation: rise .4s ease-out both; }
+@keyframes rise { from { transform: translateY(10px); opacity: 0; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .pop, .rise { animation: none; } .ring .fg { transition: none; } }
+</style>
+<div class="looks" role="group" aria-label="Farebný smer"><span>Štýl</span><button data-look="volt" class="on">Volt</button><button data-look="ember">Ember</button><button data-look="ice">Ice</button></div>
+<div class="shell"><div class="phone" id="phone"></div></div>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <linearGradient id="rg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="var(--a1)"/><stop offset="1" stop-color="var(--a2)"/></linearGradient>
+  <linearGradient id="cg" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="var(--a2)"/><stop offset="1" stop-color="var(--a1)"/></linearGradient>
+  <linearGradient id="ca" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--a1)" stop-opacity=".25"/><stop offset="1" stop-color="var(--a1)" stop-opacity="0"/></linearGradient>
+</defs></svg>
+<script>
+(function () {
+  'use strict';
+  var I = {
+    play: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15a1 1 0 0 0 1.5.86l12-7.5a1 1 0 0 0 0-1.72l-12-7.5A1 1 0 0 0 7 4.5z"/></svg>',
+    flame: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2s5 4.5 5 10a5 5 0 0 1-10 0c0-2 1-3.5 1-3.5S9 11 11 11c0-4 1-9 1-9zm0 20a7 7 0 0 0 7-7c0-1.2-.3-2.3-.7-3.3C17.6 15 15 16 15 16s.5 6-3 6z"/></svg>',
+    bolt: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8z"/></svg>',
+    scale: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="16" rx="4"/><path d="M8 9a5 5 0 0 1 8 0l-3 3"/></svg>',
+    cam: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.5"/></svg>',
+    home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11 12 4l9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>',
+    cal: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>',
+    chart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V5M4 19h16"/><path d="m8 15 4-4 3 3 5-6"/></svg>',
+    x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>',
+    check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>',
+    trophy: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 3h10v2h3v3a4 4 0 0 1-4 4h-.3A5 5 0 0 1 13 15v3h3v3H8v-3h3v-3a5 5 0 0 1-2.7-3H8a4 4 0 0 1-4-4V5h3zm-1 4v1a2 2 0 0 0 1 1.7V7zm11 0v2.7A2 2 0 0 0 18 8V7z"/></svg>',
+    up: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>',
+  };
+  var esc = function (s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); };
+  var kg = function (n) { return String(Math.round(n * 100) / 100).replace('.', ','); };
+  var vol = function (n) { return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ' '); };
+
+  // ---------------- Ukážkové dáta ----------------
+  var TODAY = [
+    { name: 'Lat pulldown', sets: 3, reps: 10, kg: 62.5, step: 2.5, rpe: '8', last: { kg: 60, reps: [10, 10, 10], rpe: 7.5 }, best: 60, rest: 120, coach: '' },
+    { name: 'Seated row', sets: 3, reps: 10, kg: 57.5, step: 2.5, rpe: '8', last: { kg: 55, reps: [10, 10, 10], rpe: 8 }, best: 55, rest: 120, coach: 'Lakte k telu, pauza 2 min' },
+    { name: 'Face pull', sets: 3, reps: 15, kg: 20, step: 2.5, rpe: '8', last: { kg: 20, reps: [15, 15, 14], rpe: 8 }, best: 22.5, rest: 60, coach: '' },
+    { name: 'Biceps curl', sets: 3, reps: 12, kg: 14, step: 2, rpe: '8', last: { kg: 14, reps: [12, 10, 9], rpe: 9.5 }, best: 14, rest: 90, coach: 'Pomaly dole, 3 sekundy' },
+  ];
+  var HIST = {
+    'Lat pulldown': [55, 57.5, 60], 'Seated row': [50, 52.5, 55], 'Face pull': [17.5, 20, 20], 'Biceps curl': [12, 12, 14],
+    'Bench press': [70, 72.5, 75, 77.5], 'Squat': [90, 95, 95, 95], 'Romanian deadlift': [80, 85, 90, 92.5], 'Leg press': [160, 170, 170, 160],
+  };
+  var BODY = [85.6, 85.4, 85.5, 85.2, 85.3, 85.0, 84.9, 85.1, 84.8, 84.9, 84.7, 84.6, 84.8, 84.5, 84.4, 84.6, 84.3, 84.4, 84.2];
+  var WEEK = [
+    { d: 'Po', n: 1, title: 'Push', ex: 'Bench press · Incline DB · Cable fly · Triceps', state: 'done', info: 'Hotovo · 58 min · RPE 8' },
+    { d: 'St', n: 2, title: 'Nohy', ex: 'Squat · Romanian deadlift · Leg press · Calf', state: 'done', info: 'Hotovo · 64 min · RPE 8,5' },
+    { d: 'So', n: 3, title: 'Pull', ex: 'Lat pulldown · Seated row · Face pull · Biceps', state: 'today', info: '4 cviky · ~50 min' },
+  ];
+
+  // ---------------- Stav ----------------
+  var S = { tab: 'today', wo: null, sheet: null, weighed: false, w: 84.2 };
+  try { var lk = localStorage.getItem('fitko.proto.look'); if (lk) setLook(lk); } catch (e) {}
+  function setLook(l) {
+    document.documentElement.dataset.look = l;
+    document.querySelectorAll('.looks button').forEach(function (b) { b.classList.toggle('on', b.dataset.look === l); });
+    try { localStorage.setItem('fitko.proto.look', l); } catch (e) {}
+  }
+  function newWorkout() {
+    return { i: 0, start: Date.now(), ex: TODAY.map(function (e) { return { sets: [], cur: { kg: e.kg, reps: e.reps }, rpe: null, note: '' }; }), rest: null };
+  }
+
+  var phone = document.getElementById('phone');
+  var tick = null;
+  function render() {
+    var keep = phone.querySelector('.scroll, .wo-body');
+    var st = keep ? keep.scrollTop : 0;
+    var html = '';
+    if (S.view === 'summary') html = summary();
+    else html = '<div class="bg-glow"></div><div class="scroll">' + (S.tab === 'today' ? today() : S.tab === 'week' ? week() : progress()) + '</div>' + tabs();
+    if (S.wo && S.view !== 'summary') html += workout();
+    if (S.sheet) html += S.sheet();
+    phone.innerHTML = html;
+    var k2 = phone.querySelector('.scroll, .wo-body');
+    if (k2 && !S.resetScroll) k2.scrollTop = st;
+    S.resetScroll = false;
+    clearInterval(tick);
+    if (S.wo && S.view !== 'summary') tick = setInterval(timers, 1000);
+  }
+  function toast(t) {
+    var el = document.createElement('div'); el.className = 'toast rise'; el.textContent = t; phone.appendChild(el);
+    setTimeout(function () { el.remove(); }, 2200);
+  }
+
+  // ---------------- Dnes ----------------
+  function today() {
+    var e0 = TODAY[0];
+    var weigh = S.weighed
+      ? '<div class="card weigh rise"><div class="tip" style="flex:1"><div class="ic grad">' + I.check + '</div><div><b>Ranná váha ' + kg(S.w) + ' kg</b><span>7-dňový priemer 84,4 · −0,6 kg za týždeň</span></div></div></div>'
+      : '<div class="card weigh"><div class="lbl"><b>Ranná váha</b><span>včera 84,3 · trend −0,6 kg/týž.</span></div><div class="stepper"><button data-a="w" data-d="-0.1" aria-label="Menej">−</button><span class="v num">' + kg(S.w) + '<small>kg</small></span><button data-a="w" data-d="0.1" aria-label="Viac">+</button></div><button class="btn acc grad" data-a="weigh">OK</button></div>';
+    return '<div class="top"><div><div class="eyebrow">Sobota 28. 11.</div><div style="font-weight:800;font-size:18px">Ahoj, Marián</div></div><span class="streak">' + I.flame + '4 týždne v rade</span></div>' +
+      weigh +
+      '<div class="hero grad"><div class="hero-in"><div class="eyebrow">Dnes · Týždeň 4 · Deň 3</div><h1 class="h-xl">Pull<br><span class="gtext">chrbát + biceps</span></h1>' +
+      '<div class="meta"><span><b>4</b> cviky</span><span><b>12</b> sérií</span><span>~<b>50</b> min</span></div>' +
+      '<div class="chips">' + TODAY.map(function (e) { return '<span class="chip">' + esc(e.name) + '</span>'; }).join('') + '</div>' +
+      '<button class="cta grad" data-a="start">' + I.play + 'Začať tréning</button></div></div>' +
+      '<div class="card tip"><div class="ic grad">' + I.bolt + '</div><div><b>Lat pulldown: dnes 62,5 kg</b><span>Minule si dal 60 kg 3 × 10 pri RPE 7,5 – bolo to ľahké. Nový rekord je na dosah.</span></div></div>' +
+      '<div class="card tip"><div class="ic" style="background:var(--surface-2);color:var(--warn)">' + I.cam + '</div><div><b>Zajtra sú nedeľné fotky</b><span>Ráno nalačno, rovnaké svetlo ako minule. Pripomeniem ti to.</span></div></div>' +
+      '<div class="sec"><h3>Tento týždeň</h3><button data-a="tab" data-t="week">Celý plán</button></div>' +
+      '<div class="week">' + ['Po', 'Ut', 'St', 'Št', 'Pi', 'So', 'Ne'].map(function (d, i) {
+        var cls = i === 0 || i === 2 ? 'done' : i === 5 ? 'today grad' : 'off';
+        return '<div class="wd ' + (cls.indexOf('grad') >= 0 ? 'today' : cls) + '"><i class="' + (cls.indexOf('grad') >= 0 ? 'grad' : '') + '">' + (cls === 'done' ? '✓' : i === 5 ? '3' : '·') + '</i>' + d + '</div>';
+      }).join('') + '</div>';
+  }
+  function tabs() {
+    var t = function (k, ic, l) { return '<button class="' + (S.tab === k ? 'on' : '') + '" data-a="tab" data-t="' + k + '">' + ic + l + '</button>'; };
+    return '<nav class="tabs">' + t('today', I.home, 'Dnes') + t('week', I.cal, 'Týždeň') + t('progress', I.chart, 'Progres') + '</nav>';
+  }
+
+  // ---------------- Týždeň ----------------
+  function week() {
+    return '<div class="eyebrow">COMEBACK NOV</div><h1 class="h-l" style="margin:4px 0 16px">Týždeň 4 <span class="gtext">23.–29.11.</span></h1>' +
+      WEEK.map(function (w) {
+        return '<div class="card dayc ' + w.state + '"><div class="n num ' + (w.state === 'today' ? 'grad' : '') + '">' + w.n + '</div><div class="t"><b>' + w.d + ' · ' + w.title + '</b><span>' + w.ex + '</span><span>' + w.info + '</span></div>' +
+          (w.state === 'done' ? '<span class="badge ok">Hotovo</span>' : '<span class="badge now grad">Dnes</span>') + '</div>';
+      }).join('') +
+      '<div class="card" style="color:var(--muted);font-size:13px">Ďalší týždeň (T5) ti pripraví tréner. Keď ho pošle, objaví sa tu.</div>';
+  }
+
+  // ---------------- Progres ----------------
+  function spark(vals) {
+    var W = 76, H = 30, mn = Math.min.apply(null, vals), mx = Math.max.apply(null, vals); if (mx === mn) { mn -= 1; mx += 1; }
+    var x = function (i) { return 3 + i * (W - 6) / (vals.length - 1); }, y = function (v) { return 4 + (1 - (v - mn) / (mx - mn)) * (H - 8); };
+    return '<svg class="spark" viewBox="0 0 ' + W + ' ' + H + '"><path d="' + vals.map(function (v, i) { return (i ? 'L' : 'M') + x(i).toFixed(1) + ',' + y(v).toFixed(1); }).join(' ') + '"/></svg>';
+  }
+  function chart(vals, labels, unit) {
+    var W = 360, H = 190, L = 40, R = 12, T = 16, B = 26;
+    var mn = Math.min.apply(null, vals), mx = Math.max.apply(null, vals); if (mx === mn) { mn -= 1; mx += 1; }
+    var p = (mx - mn) * .2; mn -= p; mx += p;
+    var x = function (i) { return L + i * (W - L - R) / (vals.length - 1); }, y = function (v) { return T + (1 - (v - mn) / (mx - mn)) * (H - T - B); };
+    var d = vals.map(function (v, i) { return (i ? 'L' : 'M') + x(i).toFixed(1) + ',' + y(v).toFixed(1); }).join(' ');
+    var grid = [0, .5, 1].map(function (f) { var v = mn + (mx - mn) * f; return '<line class="gl" x1="' + L + '" x2="' + (W - R) + '" y1="' + y(v) + '" y2="' + y(v) + '"/><text class="ax" x="' + (L - 6) + '" y="' + (y(v) + 3) + '" text-anchor="end">' + kg(Math.round(v * 10) / 10) + '</text>'; }).join('');
+    var lab = labels.map(function (l, i) { return (i === 0 || i === labels.length - 1 || labels.length < 6) ? '<text class="ax" x="' + x(i) + '" y="' + (H - 6) + '" text-anchor="middle">' + l + '</text>' : ''; }).join('');
+    return '<svg class="chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Graf ' + unit + '">' + grid + '<path class="ar" d="' + d + ' L' + x(vals.length - 1) + ',' + (H - B) + ' L' + x(0) + ',' + (H - B) + ' Z"/><path class="ln" d="' + d + '"/>' +
+      vals.map(function (v, i) { return i === vals.length - 1 ? '<circle class="pt" cx="' + x(i) + '" cy="' + y(v) + '" r="5"/>' : ''; }).join('') + lab + '</svg>';
+  }
+  function trendOf(v) {
+    var a = v[v.length - 1], b = v[v.length - 2], first = v[0];
+    if (a < b) return ['down', '↓ klesá'];
+    if (v.length >= 3 && v[v.length - 1] === v[v.length - 3]) return ['same', '→ stagnuje'];
+    if (a > first) return ['up', '↑ +' + kg(a - first) + ' kg'];
+    return ['same', '→ drží'];
+  }
+  function progress() {
+    var rows = Object.keys(HIST).map(function (n) {
+      var v = HIST[n], t = trendOf(v);
+      return '<button class="pex" data-a="ex" data-n="' + esc(n) + '"><div class="nm"><b>' + esc(n) + '</b><span>' + kg(v[v.length - 1]) + ' kg · rekord ' + kg(Math.max.apply(null, v)) + ' kg</span></div>' + spark(v) + '<span class="trend ' + t[0] + '">' + t[1] + '</span></button>';
+    }).join('');
+    return '<div class="eyebrow">Progres</div><h1 class="h-l" style="margin:4px 0 14px">Ideš <span class="gtext">hore</span></h1>' +
+      '<div class="tiles"><div class="tile"><div class="num gtext">6</div><div class="k">cvikov hore</div></div><div class="tile"><div class="num">3</div><div class="k">rekordy v bloku</div></div><div class="tile"><div class="num">−1,4</div><div class="k">kg za 3 týž.</div></div></div>' +
+      '<div class="card"><div class="sec" style="margin-top:0"><h3>Ranná váha</h3><span style="color:var(--muted);font-size:13px">84,2 kg</span></div>' + chart(BODY, ['10.11.', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '28.11.'], 'váhy') + '</div>' +
+      '<div class="sec"><h3>Cviky</h3><span style="color:var(--muted);font-size:13px">ťukni pre detail</span></div><div class="card" style="padding:4px 16px">' + rows + '</div>' +
+      '<div class="card tip"><div class="ic" style="background:var(--surface-2);color:var(--warn)">' + I.cam + '</div><div><b>Fotky progresu</b><span>22.11. · 3 fotky · ďalšie zajtra</span></div></div>';
+  }
+  function exSheet(n) {
+    return function () {
+      var v = HIST[n];
+      return '<div class="sheet-bg" data-a="close"><div class="sheet rise" role="dialog" aria-label="' + esc(n) + '"><div class="grab"></div><div class="eyebrow">Detail cviku</div><h2 class="h-l" style="margin:4px 0 12px">' + esc(n) + '</h2>' +
+        '<div class="tiles"><div class="tile"><div class="num gtext">' + kg(Math.max.apply(null, v)) + '</div><div class="k">rekord kg</div></div><div class="tile"><div class="num">' + kg(v[v.length - 1]) + '</div><div class="k">posledne</div></div><div class="tile"><div class="num">+' + Math.round((v[v.length - 1] / v[0] - 1) * 100) + '%</div><div class="k">za blok</div></div></div>' +
+        chart(v, v.map(function (_, i) { return 'T' + (i + 1); }), 'váhy cviku') + '</div></div>';
+    };
+  }
+
+  // ---------------- Tréning ----------------
+  function workout() {
+    var W = S.wo, e = TODAY[W.i], x = W.ex[W.i];
+    var doneSets = x.sets.length, allDone = doneSets >= e.sets;
+    var segs = TODAY.map(function (_, i) { return '<i class="' + (i < W.i ? 'done' : i === W.i ? 'cur' : '') + '"></i>'; }).join('');
+    var lastTxt = e.last.reps.every(function (r) { return r === e.last.reps[0]; }) ? e.sets + ' × ' + e.last.reps[0] : e.last.reps.join(', ');
+    var tipTxt = e.kg > e.last.kg
+      ? 'Tréner pridal <b>+' + kg(e.kg - e.last.kg) + ' kg</b>. Minule RPE ' + kg(e.last.rpe) + ' – máš rezervu.'
+      : e.last.reps.some(function (r) { return r < e.reps; }) ? 'Minule ' + e.last.reps.join(', ') + ' opak. – dnes skús dať všetky ' + e.reps + '.' : 'Drž techniku, rovnaká váha ako minule.';
+    var sets = '';
+    for (var k = 0; k < e.sets; k++) {
+      var s = x.sets[k];
+      if (s) {
+        var pr = s.kg > e.best;
+        sets += '<div class="set done' + (k === doneSets - 1 ? ' pop' : '') + '"><span class="sn grad">' + I.check + '</span><span class="sv num">' + kg(s.kg) + ' <small>kg</small> × ' + s.reps + '</span>' + (pr ? '<span class="pr grad">Rekord</span>' : '') + '</div>';
+      } else if (k === doneSets) {
+        sets += '<div class="set cur"><div class="row"><span class="sn">' + (k + 1) + '</span><b>Séria ' + (k + 1) + ' z ' + e.sets + '</b></div>' +
+          '<div class="ctrl"><div><div class="lbl">Váha (kg)</div><div class="big"><button data-a="kg" data-d="-1" aria-label="Menej kg">−</button><span class="v num">' + kg(x.cur.kg) + '</span><button data-a="kg" data-d="1" aria-label="Viac kg">+</button></div></div>' +
+          '<div><div class="lbl">Opakovania</div><div class="big"><button data-a="reps" data-d="-1" aria-label="Menej opakovaní">−</button><span class="v num">' + x.cur.reps + '</span><button data-a="reps" data-d="1" aria-label="Viac opakovaní">+</button></div></div></div>' +
+          '<button class="setdone grad" data-a="set">' + I.check + 'Séria hotová</button></div>';
+      } else {
+        sets += '<div class="set"><span class="sn">' + (k + 1) + '</span><span class="sv num" style="color:var(--dim)">' + kg(x.cur.kg) + ' <small>kg</small> × ' + e.reps + '</span></div>';
+      }
+    }
+    var rpe = allDone ? '<div class="rpe rise"><b>Ako ťažké to bolo? (RPE)</b><div class="rpe-row">' + ['7', '7,5', '8', '8,5', '9', '10'].map(function (v) { return '<button class="' + (x.rpe === v ? 'on grad' : '') + '" data-a="rpe" data-v="' + v + '">' + v + '</button>'; }).join('') + '</div><input id="exnote" placeholder="Poznámka pre trénera (nepovinné)" value="' + esc(x.note) + '"></div>' : '';
+    var foot = allDone ? '<div class="wo-foot"><button class="setdone grad" data-a="next" ' + (x.rpe ? '' : 'style="opacity:.5"') + '>' + (W.i < TODAY.length - 1 ? 'Ďalší cvik →' : 'Dokončiť tréning') + '</button></div>' : '';
+    var rest = W.rest ? restView() : '';
+    return '<div class="wo"><div class="wo-top"><div class="wo-bar"><button class="x" data-a="quit" aria-label="Prerušiť">' + I.x + '</button><span class="eyebrow">Cvik ' + (W.i + 1) + ' z ' + TODAY.length + '</span><span class="clock num" id="clock">' + clock() + '</span></div><div class="segs">' + segs + '</div></div>' +
+      '<div class="wo-body"><h1 class="h-xl exn">' + esc(e.name) + '</h1>' + (e.coach ? '<div class="coachnote">Tréner: ' + esc(e.coach) + '</div>' : '<div style="height:10px"></div>') +
+      '<div class="cmp"><span></span><span class="k">Série</span><span class="k">Váha</span><span class="k">RPE</span>' +
+      '<span class="k">Plán</span><span class="v num">' + e.sets + '×' + e.reps + '</span><span class="v num">' + kg(e.kg) + '</span><span class="v num">' + e.rpe + '</span>' +
+      '<span class="k">Minule</span><span class="v num last">' + lastTxt.replace(' × ', '×') + '</span><span class="v num last">' + kg(e.last.kg) + '</span><span class="v num last">' + kg(e.last.rpe) + '</span></div>' +
+      '<div class="ptip">' + I.bolt + '<span>' + tipTxt + '</span></div>' + sets + rpe + '</div>' + foot + rest + '</div>';
+  }
+  function clock() { var s = Math.floor((Date.now() - S.wo.start) / 1000); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); }
+  function restView() {
+    var r = S.wo.rest, left = Math.max(0, Math.ceil((r.until - Date.now()) / 1000)), C = 2 * Math.PI * 118;
+    var e = TODAY[S.wo.i], x = S.wo.ex[S.wo.i], nextSet = x.sets.length < e.sets;
+    var next = nextSet ? 'Ďalej: <b>séria ' + (x.sets.length + 1) + ' · ' + kg(x.cur.kg) + ' kg × ' + x.cur.reps + '</b>' : 'Ďalej: <b>ohodnoť cvik (RPE)</b>';
+    return '<div class="rest' + (left === 0 ? ' end' : '') + '" id="rest"><div><div class="eyebrow">Pauza</div><div class="ring"><svg viewBox="0 0 260 260"><circle class="bgc" cx="130" cy="130" r="118"/><circle class="fg" id="rfg" cx="130" cy="130" r="118" stroke-dasharray="' + C + '" stroke-dashoffset="' + (C * (1 - left / r.total)) + '"/></svg><div class="t"><span class="num" id="rleft">' + Math.floor(left / 60) + ':' + String(left % 60).padStart(2, '0') + '</span><span>' + (left === 0 ? 'poď na to' : 'oddychuj') + '</span></div></div>' +
+      '<div class="next">' + next + '</div><div class="acts"><button class="btn" data-a="plus30">+30 s</button><button class="btn acc grad" data-a="skip">' + (left === 0 ? 'Pokračovať' : 'Preskočiť') + '</button></div></div></div>';
+  }
+  function timers() {
+    var c = document.getElementById('clock'); if (c) c.textContent = clock();
+    var r = S.wo && S.wo.rest; if (!r) return;
+    var left = Math.max(0, Math.ceil((r.until - Date.now()) / 1000)), C = 2 * Math.PI * 118;
+    var fg = document.getElementById('rfg'), t = document.getElementById('rleft');
+    if (fg) fg.setAttribute('stroke-dashoffset', C * (1 - left / r.total));
+    if (t) t.textContent = Math.floor(left / 60) + ':' + String(left % 60).padStart(2, '0');
+    if (left === 0 && !r.buzzed) { r.buzzed = true; if (navigator.vibrate) navigator.vibrate([250, 120, 250]); render(); }
+  }
+
+  // ---------------- Súhrn ----------------
+  function summary() {
+    var W = S.wo, mins = Math.max(1, Math.round((Date.now() - W.start) / 60000));
+    var setsN = W.ex.reduce(function (a, x) { return a + x.sets.length; }, 0);
+    var prs = [], rows = '';
+    TODAY.forEach(function (e, i) {
+      var x = W.ex[i]; if (!x.sets.length) return;
+      var top = Math.max.apply(null, x.sets.map(function (s) { return s.kg; }));
+      if (top > e.best) prs.push([e.name, top, e.best]);
+      var v = x.sets.reduce(function (a, s) { return a + s.kg * s.reps; }, 0), lv = e.last.kg * e.last.reps.reduce(function (a, b) { return a + b; }, 0), p = v / lv - 1;
+      var reps = x.sets.every(function (s) { return s.reps === x.sets[0].reps; }) ? x.sets.length + '×' + x.sets[0].reps : x.sets.map(function (s) { return s.reps; }).join(', ');
+      rows += '<div class="srow"><div class="nm"><b>' + esc(e.name) + '</b><span>' + kg(top) + ' kg · ' + reps + (x.rpe ? ' · RPE ' + x.rpe : '') + '</span></div><div class="vol"><b>' + vol(v) + ' kg</b><span class="' + (p > 0 ? 'up' : p < 0 ? 'down' : '') + '">' + (p > 0 ? '+' : '') + Math.round(p * 1000) / 10 + ' %</span> objem</div></div>';
+    });
+    return '<div class="bg-glow"></div><div class="scroll"><div class="sum-hero rise"><div class="medal grad">' + I.trophy + '</div><div class="eyebrow">Deň 3 · Pull · ' + mins + ' min</div><h1 class="h-xl">Tréning <span class="gtext">hotový</span></h1></div>' +
+      '<div class="tiles"><div class="tile"><div class="num">' + mins + '</div><div class="k">minút</div></div><div class="tile"><div class="num">' + setsN + '</div><div class="k">sérií</div></div><div class="tile"><div class="num gtext">' + prs.length + '</div><div class="k">rekordy</div></div></div>' +
+      prs.map(function (p) { return '<div class="prc grad rise">' + I.trophy + '<div><b>Nový rekord: ' + esc(p[0]) + '</b><span>' + kg(p[1]) + ' kg (doteraz ' + kg(p[2]) + ' kg)</span></div></div>'; }).join('') +
+      '<div class="sec"><h3>Cviky</h3><span style="color:var(--muted);font-size:13px">objem oproti minulému týždňu</span></div><div class="card" style="padding:4px 16px">' + (rows || '<div class="srow">Žiadne zapísané série.</div>') + '</div>' +
+      '<div class="card"><b>Celý tréning bol (RPE)</b><div class="rpe-row" style="margin-top:10px">' + ['6', '7', '8', '9', '10'].map(function (v) { return '<button class="' + (S.sesh === v ? 'on grad' : '') + '" data-a="sesh" data-v="' + v + '">' + v + '</button>'; }).join('') + '<span></span></div></div>' +
+      '<button class="cta grad" data-a="finish" style="margin-top:6px">' + I.check + 'Uložiť do tabuľky</button></div>';
+  }
+
+  // ---------------- Udalosti ----------------
+  document.addEventListener('click', function (ev) {
+    var lb = ev.target.closest('.looks button'); if (lb) { setLook(lb.dataset.look); return; }
+    var t = ev.target.closest('[data-a]'); if (!t) return;
+    if (t.dataset.a === 'close' && t !== ev.target) return;
+    var a = t.dataset.a, W = S.wo, e = W && TODAY[W.i], x = W && W.ex[W.i];
+    switch (a) {
+      case 'tab': S.tab = t.dataset.t; S.resetScroll = true; render(); break;
+      case 'w': S.w = Math.round((S.w + Number(t.dataset.d)) * 10) / 10; render(); break;
+      case 'weigh': S.weighed = true; if (navigator.vibrate) navigator.vibrate(20); render(); toast('Váha uložená do tabuľky'); break;
+      case 'start': S.wo = newWorkout(); S.view = null; S.resetScroll = true; render(); break;
+      case 'quit': S.wo = null; render(); toast('Tréning prerušený – zápisy ostali uložené'); break;
+      case 'kg': x.cur.kg = Math.max(0, Math.round((x.cur.kg + Number(t.dataset.d) * e.step) * 100) / 100); render(); break;
+      case 'reps': x.cur.reps = Math.max(1, x.cur.reps + Number(t.dataset.d)); render(); break;
+      case 'set':
+        x.sets.push({ kg: x.cur.kg, reps: x.cur.reps });
+        if (navigator.vibrate) navigator.vibrate(30);
+        if (x.cur.kg > e.best && x.sets.length === 1) toast('Nový osobný rekord! ' + kg(x.cur.kg) + ' kg');
+        W.rest = { until: Date.now() + e.rest * 1000, total: e.rest };
+        render(); break;
+      case 'plus30': W.rest.until += 30000; W.rest.total += 30; W.rest.buzzed = false; render(); break;
+      case 'skip': W.rest = null; render(); break;
+      case 'rpe': x.rpe = t.dataset.v; var n = document.getElementById('exnote'); if (n) x.note = n.value; render(); break;
+      case 'next':
+        if (!x.rpe) { toast('Najprv ťukni RPE'); break; }
+        if (W.i < TODAY.length - 1) { W.i++; W.rest = null; S.resetScroll = true; render(); } else { S.view = 'summary'; S.resetScroll = true; render(); }
+        break;
+      case 'sesh': S.sesh = t.dataset.v; render(); break;
+      case 'finish': S.wo = null; S.view = null; S.tab = 'today'; S.resetScroll = true; render(); toast('Tréning uložený 💪'); break;
+      case 'ex': S.sheet = exSheet(t.dataset.n); render(); break;
+      case 'close': S.sheet = null; render(); break;
+    }
+  });
+  document.addEventListener('input', function (ev) { if (ev.target.id === 'exnote' && S.wo) S.wo.ex[S.wo.i].note = ev.target.value; });
+  render();
+})();
+</script>
