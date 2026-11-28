@@ -245,6 +245,7 @@ button { cursor: pointer; border: 0; background: none; padding: 0; }
 .sheet.no-anim { animation: none; }
 body.sheet-open { overflow: hidden; }
 .tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.tiles.four { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .tile { background: var(--surface-2); border-radius: 14px; padding: 12px; }
 .tile-v { font-size: 26px; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
 .tile-v small { font-size: 14px; color: var(--muted); font-weight: 600; letter-spacing: 0; }
@@ -261,6 +262,10 @@ body.sheet-open { overflow: hidden; }
 .sum-name { font-weight: 600; font-size: 15px; }
 .sum-val { font-size: 14px; }
 .sum-last { font-size: 13px; color: var(--muted); }
+.sum-vol { font-size: 13px; color: var(--muted); }
+.sum-vol b { color: var(--text); }
+.sum-vol .up { color: var(--ok); font-weight: 700; }
+.sum-vol .down { color: var(--err); font-weight: 700; }
 
 /* ---------- progress chart ---------- */
 .chart-block { margin-bottom: 18px; }

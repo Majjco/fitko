@@ -50,6 +50,9 @@ const WEIGHT_SHEET = 'Váha';
 const PHOTO_FOLDER = 'Fitko – progres fotky';
 const PHOTO_SHEET = 'Fotky';
 
+// Nastavenia trénerovho portálu (cieľový rast objemu, kroky váhy pri cvikoch).
+const SETTINGS_SHEET = 'Fitko nastavenia';
+
 function doGet(e) {
   try {
     const p = (e && e.parameter) || {};
@@ -79,7 +82,7 @@ function doGet(e) {
       .filter(function (s) { return s.getSheetId() !== sheet.getSheetId() && looksLikePlan_(s); })
       .map(function (s) { return s.getName(); });
 
-    return json_({ ok: true, sheet: sheet.getName(), history: history, rows: rows, weights: readWeights_(ss), photos: readPhotos_(ss), role: role, title: ss.getName() });
+    return json_({ ok: true, sheet: sheet.getName(), history: history, rows: rows, weights: readWeights_(ss), photos: readPhotos_(ss), settings: readSettings_(ss), role: role, title: ss.getName() });
   } catch (err) {
     return json_({ ok: false, error: String(err) });
   }
@@ -178,7 +181,49 @@ function coachOp_(ss, body) {
   if (!sheet) return { ok: false, error: 'Hárok sa nenašiel' };
   if (body.op === 'plan') return savePlan_(sheet, body);
   if (body.op === 'copyWeek') return copyWeek_(sheet, Number(body.from));
+  if (body.op === 'applyWeek') return applyWeek_(sheet, body);
+  if (body.op === 'setting') return saveSetting_(ss, String(body.key || ''), body.value);
   return { ok: false, error: 'Neznáma operácia' };
+}
+
+// Návrh ďalšieho týždňa: bez `target` najprv naplánuje týždeň kópiou (copyWeek_ – najbližší
+// prázdny týždeň alebo nový blok), potom do neho zapíše PLANNED hodnoty z náhľadu.
+// Opakovanie po čiastočnom zlyhaní pošle `target` a len neúspešné riadky.
+// rows: [{ day, col, expect, fields: { sets, weight, rpe, note } }]
+function applyWeek_(sheet, b) {
+  let week = Number(b.target);
+  let created = false;
+  if (!(week >= 1)) {
+    const copy = copyWeek_(sheet, Number(b.from));
+    if (!copy.ok) return copy;
+    week = copy.week;
+    created = copy.created;
+    SpreadsheetApp.flush();
+  }
+  const rows = Array.isArray(b.rows) ? b.rows : [];
+  const results = rows.map(function (r) {
+    try {
+      const row = findDayRow_(sheet, week, Number(r.day));
+      if (!row) return { day: r.day, col: r.col, ok: false, error: 'Deň sa v tabuľke nenašiel' };
+      const col = Number(r.col);
+      if (!(col >= 1)) return { day: r.day, col: r.col, ok: false, error: 'Chýba stĺpec cviku' };
+      const current = sheet.getRange(row, col).getDisplayValue();
+      if (norm_(current) !== norm_(r.expect)) {
+        return { day: r.day, col: r.col, ok: false, error: 'Cvik v tabuľke je iný („' + current + '“)' };
+      }
+      const f = r.fields || {};
+      ['sets', 'weight', 'rpe', 'note'].forEach(function (k) {
+        if (f[k] === undefined) return;
+        const cell = sheet.getRange(row, col + PLAN_OFFSETS[k]);
+        cell.setNumberFormat('@');
+        cell.setValue(String(f[k]));
+      });
+      return { day: r.day, col: r.col, ok: true };
+    } catch (err) {
+      return { day: r.day, col: r.col, ok: false, error: String(err) };
+    }
+  });
+  return { ok: true, week: week, created: created, results: results };
 }
 
 // Zapíše PLANNED hodnoty (názov, série, váha, RPE, poznámka) jedného cviku.
@@ -357,6 +402,48 @@ function saveWeight_(ss, w) {
   ws.getRange(row, 1).setValue(Utilities.parseDate(w.date, tz, 'yyyy-MM-dd')).setNumberFormat('d.m.yyyy');
   ws.getRange(row, 2).setValue(kg).setNumberFormat('0.0');
   if (row > 2) ws.getRange(2, 1, row - 1, 2).sort(1); // chronologicky
+  return { ok: true };
+}
+
+// ----- Nastavenia portálu (záložka „Fitko nastavenia“: Nastavenie | Hodnota) -----
+// Kľúče: „progres_percent“ (napr. 5) a „krok:<NÁZOV CVIKU>“ (kg).
+function readSettings_(ss) {
+  const out = { pct: 5, steps: {} };
+  const ws = ss.getSheetByName(SETTINGS_SHEET);
+  if (!ws || ws.getLastRow() < 2) return out;
+  ws.getRange(2, 1, ws.getLastRow() - 1, 2).getValues().forEach(function (r) {
+    const key = String(r[0]).trim();
+    const val = Number(String(r[1]).replace(',', '.'));
+    if (!key || isNaN(val)) return;
+    if (key === 'progres_percent') out.pct = val;
+    else if (key.indexOf('krok:') === 0) out.steps[key.slice(5).trim()] = val;
+  });
+  return out;
+}
+
+function saveSetting_(ss, key, value) {
+  const val = Number(String(value).replace(',', '.'));
+  if (!/^(progres_percent|krok:.+)$/.test(key) || isNaN(val) || val < 0 || val > 100) {
+    return { ok: false, error: 'Neplatné nastavenie' };
+  }
+  let ws = ss.getSheetByName(SETTINGS_SHEET);
+  if (!ws) {
+    ws = ss.insertSheet(SETTINGS_SHEET, ss.getSheets().length);
+    ws.getRange(1, 1, 1, 2).setValues([['Nastavenie', 'Hodnota']]).setFontWeight('bold');
+    ws.setFrozenRows(1);
+    ws.setColumnWidth(1, 260);
+  }
+  const last = ws.getLastRow();
+  if (last >= 2) {
+    const keys = ws.getRange(2, 1, last - 1, 1).getValues();
+    for (let i = 0; i < keys.length; i++) {
+      if (String(keys[i][0]).trim() === key) {
+        ws.getRange(i + 2, 2).setValue(val);
+        return { ok: true };
+      }
+    }
+  }
+  ws.getRange(last + 1, 1, 1, 2).setValues([[key, val]]);
   return { ok: true };
 }
 
