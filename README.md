@@ -15,12 +15,13 @@ v pozadí); voľba platí len v danom telefóne. Dole tri obrazovky: **Dnes · T
   tréning), ranná váha na jedno ťuknutie (predvyplnená poslednou, ± 0,1 kg), pás dní týždňa,
   séria týždňov v rade a **proaktívne tipy** – tréner pridal váhu, minule nezvládnuté opakovania,
   dni bez tréningu, nedeľné fotky.
-- **Tréning po sériách**: pri cviku plán od trénera a minulý výkon pod sebou, tip, poznámka trénera.
-  Každá séria má veľké ovládače váhy a opakovaní (predvyplnené plánom); **Séria hotová** ju uloží a
-  **spustí pauzu** (z poznámky trénera, napr. „pauza 2 min“, inak 90 s) s odpočtom, +30 s,
-  vibráciou a zvukom na konci. Po poslednej sérii RPE a poznámka → **Uložiť cvik**. Do tabuľky sa
-  zapíše v doterajšom tvare (`3x10` alebo `10, 9, 8`, váha, RPE). **Osobný rekord** sa ohlási hneď.
-  Rozpracovaný tréning prežije zatvorenie apky. Supersety a „Ok“ cez **rýchly zápis** celého cviku.
+- **Tréning**: hore očíslované krúžky cvikov (ťukni), medzi cvikmi aj **swipe doľava/doprava**
+  alebo tlačidlá Predošlý / Ďalší. Pri cviku plán od trénera a minulý výkon pod sebou, tip,
+  poznámka trénera. Zápis celého cviku naraz: **Série · Opakovania · Váha** (± predvyplnené plánom),
+  RPE, poznámka → **Uložiť cvik**; zapíše sa ako doteraz (`3x10`, váha, RPE). **⏱ Pauza** spustí
+  odpočet (z poznámky trénera, napr. „pauza 2 min“, inak 90 s) s vibráciou a zvukom. **Osobný rekord**
+  sa ohlási hneď. Rozpracovaný cvik prežije zatvorenie apky. Nerovnaké série (`10, 9, 8`) a supersety
+  cez **Iný zápis**.
 - **Súhrn po tréningu**: čas, počet sérií, rekordy, objem pri každom cviku (série × opakovania × kg)
   so zmenou oproti minule; zapíše `WORKOUT TIME` a `SESH RPE`.
 - **Týždeň**: plán týždňa po dňoch, prepínanie týždňov, ľubovoľný deň sa dá otvoriť a zapísať.
