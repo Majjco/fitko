@@ -4,7 +4,7 @@
 
 **Created**: 2026-11-28
 
-**Status**: Draft – prototyp na odsúhlasenie
+**Status**: Implemented (apka v17, štýl Volt) – voliteľná téma „Matrix“ ako ďalší krok
 
 **Input**: User description: "Komplet UI redesign, aby to vyzeralo mega cool. Krásna, super sa
 používa, intuitívna, proaktívna."

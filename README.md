@@ -7,23 +7,27 @@ takže ich tréner vidí v tabuľke ako predtým.
 
 ## Čo apka vie
 
-- Automaticky otvorí **aktuálny týždeň** a zvýrazní **dnešný tréning**
-- Tréning **po jednom cviku**: hore prehľad 1 · 2 · 3…, rozbalený je len aktuálny cvik,
-  po uložení apka prejde na ďalší. Hotové cviky sa zbalia do riadku s výsledkom.
-- Pri každom cviku: **plán od trénera a minulý výkon pod sebou** (série, váha, RPE), poznámka trénera,
-  tlačidlo **„Ako minule“** (vyplní série a váhu z minula) a pri váhe živé porovnanie **↑ +5 kg / ↓ −2,5 kg oproti minule**
-- Supersety (`CVIK A + CVIK B`) – jedno políčko ako v tabuľke, napr. `2x8 a 2x9`, RPE `8 a 7`
-- **Súhrn po tréningu**: počet cvikov, trvanie, zlepšenia oproti minule a **objem** každého cviku
-  (série × opakovania × kg) so zmenou v % oproti minule; zapíše `WORKOUT TIME` a `SESH RPE`
-- **Graf progresu** váhy pri každom cviku – aj zo starších blokov (napr. MESOCYCLE 1.0)
-- **Ranná váha**: na úvodnej obrazovke zapíšeš dnešnú váhu, vidíš trend a 7-dňový priemer.
-  Ukladá sa do záložky **„Váha“** v tej istej tabuľke (skript ju založí sám pri prvom zápise).
-- **Fotky progresu**: v nedeľu sa na úvodnej obrazovke ukáže karta (inak tlačidlo dole).
-  Fotky sa zmenšia a uložia na **tvoj Google Drive** do priečinka „Fitko – progres fotky“ (po dňoch).
-  Priečinok sa automaticky zdieľa **len s vlastníkom tabuľky** (trénerom) a do tabuľky
-  pribudne záložka **„Fotky“** s dátumom, počtom a odkazom.
-- Funguje **offline** – keď vo fitku nie je signál, zápisy počkajú a odošlú sa neskôr
-- Dá sa pridať na plochu ako appka (iPhone: Zdieľať → Pridať na plochu)
+Vzhľad „Volt“ – tmavá športová apka s výraznými číslami, funguje aj bez signálu (vrátane písma).
+Dole tri obrazovky: **Dnes · Týždeň · Progres**.
+
+- **Dnes**: karta dnešného tréningu s tlačidlom **Začať tréning** (alebo „Dnes voľno“ a najbližší
+  tréning), ranná váha na jedno ťuknutie (predvyplnená poslednou, ± 0,1 kg), pás dní týždňa,
+  séria týždňov v rade a **proaktívne tipy** – tréner pridal váhu, minule nezvládnuté opakovania,
+  dni bez tréningu, nedeľné fotky.
+- **Tréning po sériách**: pri cviku plán od trénera a minulý výkon pod sebou, tip, poznámka trénera.
+  Každá séria má veľké ovládače váhy a opakovaní (predvyplnené plánom); **Séria hotová** ju uloží a
+  **spustí pauzu** (z poznámky trénera, napr. „pauza 2 min“, inak 90 s) s odpočtom, +30 s,
+  vibráciou a zvukom na konci. Po poslednej sérii RPE a poznámka → **Uložiť cvik**. Do tabuľky sa
+  zapíše v doterajšom tvare (`3x10` alebo `10, 9, 8`, váha, RPE). **Osobný rekord** sa ohlási hneď.
+  Rozpracovaný tréning prežije zatvorenie apky. Supersety a „Ok“ cez **rýchly zápis** celého cviku.
+- **Súhrn po tréningu**: čas, počet sérií, rekordy, objem pri každom cviku (série × opakovania × kg)
+  so zmenou oproti minule; zapíše `WORKOUT TIME` a `SESH RPE`.
+- **Týždeň**: plán týždňa po dňoch, prepínanie týždňov, ľubovoľný deň sa dá otvoriť a zapísať.
+- **Progres**: cviky s mini grafom a trendom, detail cviku (rekord, graf aj zo starších blokov),
+  ranná váha, fotky progresu.
+- **Ranná váha** sa ukladá do záložky **„Váha“** a **fotky progresu** na **tvoj Google Drive**
+  (zdieľané len s vlastníkom tabuľky, záložka **„Fotky“**).
+- Funguje **offline** – zápisy počkajú a odošlú sa neskôr. Dá sa pridať na plochu ako appka.
 
 ## Trénerov panel (voliteľný)
 
@@ -121,9 +125,9 @@ takže ho posielaj len sebe.
 
 | Súbor | Čo robí |
 |---|---|
-| `index.html`, `styles.css`, `app.js` | celá apka (bez build kroku, čistý JS) |
+| `index.html`, `app.css`, `app.js`, `fonts/` | klientska apka (bez build kroku, čistý JS; písmo Barlow Condensed, licencia OFL v `fonts/OFL.txt`) |
 | `calc.js` | výpočet objemu a návrh progresie – spoločný pre apku aj portál |
-| `trener.html`, `coach.js`, `coach.css` | trénerov panel |
+| `trener.html`, `styles.css`, `coach.js`, `coach.css` | trénerov panel |
 | `tests/` | testy výpočtov: `node --test tests/*.test.js`; `tests/e2e/` – testy v prehliadači s podvrhnutým Apps Scriptom (Playwright, `python3 -m http.server 8765` v koreni repa) |
 | `specs/`, `.specify/` | špecifikácie (spec-driven development cez GitHub Spec Kit) |
 | `sw.js`, `manifest.webmanifest`, `icons/` | offline režim a inštalácia na plochu |

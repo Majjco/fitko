@@ -12,7 +12,7 @@ apka funkčná.
 | — | Súčasný stav (baseline) | všetci | hotové | [001](001-fitko-baseline/spec.md) |
 | A | Návrh ďalšieho týždňa (objem, +X % progresia, vloženie jedným klikom) | tréner | hotové (v14), čaká na test s trénerom | [002](002-next-week-suggestions/spec.md) |
 | B+D | **Trénerov panel** – zoznam klientov, týždne vedľa seba ako v Exceli, insighty, plánovanie ďalšieho týždňa na tej istej ploche (nahrádza záložky) | tréner | hotové (v15), čaká na nasadenie skriptu | [003](003-coach-panel/spec.md) |
-| C | Redizajn klientskej apky (vzhľad, tréning po sériách, pauzy, proaktívne tipy, rekordy) | klient | prototyp na odsúhlasenie | [004](004-app-redesign/spec.md) |
+| C | Redizajn klientskej apky (vzhľad, tréning po sériách, pauzy, proaktívne tipy, rekordy) | klient | hotové (v17, Volt) | [004](004-app-redesign/spec.md) |
 | E | Viac klientov – **zoznam klientov hotový** (každý klient pošle odkaz); zostáva jeden skript pod trénerovým účtom namiesto skriptu u každého klienta | tréner | čiastočne | [003](003-coach-panel/spec.md) |
 
 ## Rozhodnutia
@@ -28,3 +28,4 @@ apka funkčná.
 - 2026-11-28: Portál so záložkami sa zahadzuje. Nový panel = jedna plocha ako trénerov Excel
   (cviky × týždne), insighty a nový týždeň ako upraviteľný stĺpec. Prototyp:
   `specs/003-coach-panel/prototype.html`.
+- 2026-11-28: Vzhľad apky „Volt“ (vybraný z 3 smerov). Nápad na neskôr: téma „Matrix“ ako voliteľný vzhľad.
