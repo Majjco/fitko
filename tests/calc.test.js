@@ -186,3 +186,12 @@ test('trend: hore, stagnácia, pokles, únava', () => {
   assert.equal(C.trend('X', [e('3x8', '95', '8')]).kind, 'none');
   assert.equal(C.trend('X', []).kind, 'none');
 });
+
+test('série s vlnovkou (približne): „2x~8“, „2x~12 obe“', () => {
+  assert.deepEqual(C.parseSets('2x~8').sets.map((s) => s.min), [8, 8]);
+  assert.deepEqual(C.parseSets('2x~12 BOTH').sets.map((s) => s.min), [12, 12]);
+  assert.equal(C.parseSets('2x~12 BOTH').extra, 'BOTH');
+  assert.deepEqual(C.parseSets('2 x ~10-12').sets[0], { min: 10, max: 12 });
+  // „Ok“ pri pláne 2x~8 a 10 kg = 160 kg
+  assert.deepEqual(C.volume('X', { sets: '2x~8' }, { sets: 'Ok', weight: '10' }), [{ value: 160, unit: 'kg' }]);
+});

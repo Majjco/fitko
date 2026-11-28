@@ -25,9 +25,10 @@ const days = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return i
   await page.fill('#lg-user', 'trener'); await page.fill('#lg-pass', 'x');
   await page.click('button[type=submit]');
   await page.waitForSelector('.ccard[data-a=open]');
-  // 2) odkaz klienta B → pribudne
-  await page.goto('about:blank');
-  await page.goto(link('B'));
+  // 2) pridanie klienta B vložením odkazu
+  await page.click('[data-a=add-client]');
+  await page.fill('#add-link', link('B'));
+  await page.click('#add-form button[type=submit]');
   await page.waitForSelector('.ccard[data-a=open] >> text=Peter');
   assert(await page.locator('.ccard[data-a=open]').count() === 2, 'zoznam má 2 klientov');
   const cardA = await page.textContent('.ccard[data-a=open]:has-text("Marián")');
@@ -46,7 +47,7 @@ const days = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return i
   await page.click('.ins.down');
   assert(await page.locator('tr.hl .exname:text("Deadlift")').count() === 1, 'insight klesá zvýrazní deadlift');
   await page.click('.ins.down');
-  await page.click('tr:has(.exname:text("Deadlift")) td.cell:nth-of-type(2) .notebtn.client');
+  await page.click('tr:has(.exname:text("Deadlift")) td.cell:nth-of-type(2) .notebtn.nb-client');
   assert((await page.textContent('.pop')).includes('bolel chrbát'), 'poznámka klienta v bubline');
   await page.mouse.click(5, 5);
   await page.click('.exname:text("Squat")');
@@ -95,12 +96,30 @@ const days = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return i
   assert((await page.textContent('table.g')).includes('Face pull'), 'nový cvik je v mriežke');
 
   // 7) úprava budúcej bunky
-  await page.click('tr:has(.exname:text("Bench press")) td.cell.plan [data-a=cell]');
+  await page.click('tr:has(.exname:text("Bench press")) td.cell.plan [data-a=cell] .s');
   await page.fill('#pc-weight', '52');
   await page.click('[data-a=cell-save]');
   await page.waitForSelector('.pop', { state: 'detached' });
   const pl = A.posts.find((p) => p.op === 'plan');
   assert(pl && pl.week === 3 && pl.fields.weight === '52' && pl.expect === 'BENCH PRESS', 'úprava budúcej bunky uložená');
+
+  // 7b) T3 je naplánovaný a ešte necvičený → Upraviť T3 na tej istej ploche
+  assert((await page.textContent('.plan-hint')).includes('T3 je naplánovaný'), 'nápoveda: T3 naplánovaný, ešte necvičený');
+  await page.click('.toolbar [data-a=edit-week]');
+  await page.waitForSelector('th.draft');
+  assert((await page.textContent('th.draft')).includes('T3 · úprava'), 'stĺpec T3 v úprave');
+  assert(await page.locator('thead th.wk').count() === 2, 'T3 nie je zobrazený dvakrát');
+  assert(await v('1-4-weight') === '52', 'políčko má aktuálny plán T3');
+  await page.click('[data-a=mode][data-m=suggest]');
+  assert(await v('1-4-weight') === '52.5', 'návrh podľa výkonov v T2');
+  await page.fill('#dr-1-4-weight', '53'); await page.locator('#dr-1-4-weight').blur();
+  await page.waitForTimeout(100);
+  assert((await page.textContent('#bar')).includes('Uložiť a poslať klientovi'), 'lišta: uložiť úpravu');
+  await page.click('#bar [data-a=send]');
+  await page.waitForSelector('th.draft', { state: 'detached' });
+  const ap2 = A.posts.filter((p) => p.op === 'applyWeek')[1];
+  assert(ap2.target === 3 && ap2.rows.some((r) => r.col === 4 && r.fields.weight === '53'), 'úprava zapísaná do existujúceho T3 (bez nového týždňa)');
+  if (OUT) await page.screenshot({ path: `${OUT}/panel-after.png` });
 
   // 8) späť na zoznam – poznámky videné
   await page.click('[data-a=clients]');
