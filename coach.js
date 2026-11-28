@@ -1,31 +1,18 @@
-/* Fitko · Tréner – portál pre trénera nad tou istou Google tabuľkou.
- * Číta a zapisuje cez Apps Script klienta (rola „coach“ = meno + heslo trénera).
- * Tréner môže meniť PLANNED stĺpce, pridávať/odoberať cviky a plánovať ďalší týždeň. */
+/* Fitko · Tréner – panel trénera nad tabuľkami klientov (specs/003-coach-panel).
+ * Zoznam klientov → panel klienta: cviky × týždne na jednej ploche, insighty, snapshot
+ * a rozpracovaný ďalší týždeň ako posledný stĺpec, ktorý sa jedným klikom pošle klientovi.
+ * Každý klient = jeho Apps Script (rola „coach“ = meno + heslo trénera). */
 (function () {
   'use strict';
 
-  const LS_KEY = 'fitko.coach';
-  const DRAFT_KEY = 'fitko.coach.draft'; // rozpracovaný návrh ďalšieho týždňa
-  const SETTINGS_KEY = 'fitko.coach.settings'; // záloha nastavení pri staršom Apps Scripte
   const C = window.FitkoCalc;
-  const STEP_OPTIONS = [1, 1.25, 2, 2.5, 5, 10];
-  const PCT_OPTIONS = [0, 2.5, 5, 7.5, 10];
+  const KEY = { cred: 'fitko.coach', clients: 'fitko.coach.clients', settings: 'fitko.coach.settings', view: 'fitko.coach.view' };
+  const draftKey = (id) => 'fitko.coach.draft.' + id;
+  const seenKey = (id) => 'fitko.coach.seen.' + id;
   const DAY_NAMES = ['Ne', 'Po', 'Ut', 'St', 'Št', 'Pi', 'So'];
-
-  const state = {
-    cfg: load(LS_KEY, { scriptUrl: '', user: '', pass: '' }),
-    data: null, // { sheet, title, weeks, weights, photos }
-    tab: (load(DRAFT_KEY, null) || {}).open ? 'plan' : 'progress', // rozpracovaný návrh sa po obnovení otvorí znova
-    weekIdx: null,
-    loading: false,
-    error: null,
-    modal: null, // { name, sel }
-    newRows: {}, // "week|day" -> [col, ...] rozpracované nové cviky
-    busy: {},
-    metric: 'weight', // Progres: 'weight' | 'volume'
-    draft: load(DRAFT_KEY, null), // { sheet, from, open, rows: { "day|col": { mode, alt, fields } }, target, failed, stale }
-    localSettings: load(SETTINGS_KEY, { pct: 5, steps: {} }),
-  };
+  const PCT_OPTIONS = [0, 2.5, 5, 7.5, 10];
+  const STEP_OPTIONS = [1, 1.25, 2, 2.5, 5, 10];
+  const FIELDS = ['sets', 'weight', 'rpe', 'note'];
 
   // ---------------------------------------------------------------------------
   // Pomocné funkcie
@@ -33,68 +20,75 @@
   function load(key, fallback) {
     try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch (_) { return fallback; }
   }
-  function save(key, v) { try { localStorage.setItem(key, JSON.stringify(v)); } catch (_) { /* nič */ } }
+  function save(key, v) {
+    try { if (v == null) localStorage.removeItem(key); else localStorage.setItem(key, JSON.stringify(v)); } catch (_) { /* nič */ }
+  }
   const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   const norm = (s) => String(s || '').toUpperCase().replace(/\s+/g, ' ').trim();
   const pad = (n) => String(n).padStart(2, '0');
   const isoDate = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const todayIso = () => isoDate(new Date());
+  const isoPlus = (iso, days) => { const [y, m, d] = iso.split('-').map(Number); return isoDate(new Date(y, m - 1, d + days)); };
   const splitParts = (name) => String(name || '').split(/\s+\+\s+/).map((p) => p.trim()).filter(Boolean);
   const matchKey = (s) => norm(s).replace(/\(.*?\)/g, ' ').replace(/\s+-\s+.*$/, '').replace(/\bOF CHOICE\b/g, ' ').replace(/\bDUMB+ELLS?\b/g, 'DB').replace(/\s+/g, ' ').trim();
   const nameKey = (name) => splitParts(name).map(matchKey).join(' + ');
   const cap = (s) => { const t = String(s || '').trim().toLowerCase(); return t.charAt(0).toUpperCase() + t.slice(1); };
-  const fmtKg = (n) => (Math.round(n * 10) / 10).toString().replace('.', ',');
+  const nice = (name) => splitParts(name).map(cap).join(' + ');
+  const fmtKg = (n) => (Math.round(n * 100) / 100).toString().replace('.', ',');
   const hasAny = (f) => Boolean(f && (f.sets || f.weight || f.rpe));
+  const prettySets = (s) => (s ? String(s).replace(/\s*[xX×]\s*/g, '×').replace(/BOTH/gi, ' obe').replace(/\s+/g, ' ').trim() : '');
+  const prettyNum = (s) => String(s || '').replace(/(\d)\.(\d)/g, '$1,$2');
+  const isNumW = (s) => /^[\d.,\s–-]+$/.test(String(s || '').trim()) && /\d/.test(String(s || ''));
+  const sameFields = (a, b) => FIELDS.every((k) => String((a || {})[k] || '').trim() === String((b || {})[k] || '').trim());
+  const idFor = (url) => { let h = 0; for (const ch of String(url)) h = (h * 31 + ch.charCodeAt(0)) | 0; return 'c' + (h >>> 0).toString(36); };
+  const plural = (n, one, few, many) => (n === 1 ? one : n >= 2 && n <= 4 ? few : many);
 
   function parseDate(raw) {
     const s = String(raw || '').trim();
+    if (!s) return null;
     let m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
     if (m) return `${m[1]}-${m[2]}-${m[3]}`;
     m = s.match(/^(\d{1,2})\.\s*(\d{1,2})\.?\s*(\d{4})?$/);
     if (m) {
+      const day = +m[1], mon = +m[2] - 1;
+      if (m[3]) return isoDate(new Date(+m[3], mon, day));
       const now = new Date();
-      const y = m[3] ? +m[3] : now.getFullYear();
-      return isoDate(new Date(y, +m[2] - 1, +m[1]));
+      let best = null;
+      for (const y of [now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1]) {
+        const d = new Date(y, mon, day);
+        if (!best || Math.abs(d - now) < Math.abs(best - now)) best = d;
+      }
+      return isoDate(best);
     }
     return null;
   }
+  const dateOf = (iso) => { const [y, m, d] = iso.split('-').map(Number); return new Date(y, m - 1, d); };
   function formatDate(iso, withDay = true) {
     if (!iso) return '';
-    const [y, m, d] = iso.split('-').map(Number);
-    const dt = new Date(y, m - 1, d);
-    return withDay ? `${DAY_NAMES[dt.getDay()]} ${d}.${m}.` : `${d}.${m}.`;
+    const date = dateOf(iso);
+    return withDay ? `${DAY_NAMES[date.getDay()]} ${date.getDate()}.${date.getMonth() + 1}.` : `${date.getDate()}.${date.getMonth() + 1}.`;
   }
-  const prettySets = (s) => (s ? String(s).replace(/\s*[xX×]\s*/g, ' × ').replace(/BOTH/gi, ' obe').replace(/\s+/g, ' ').trim() : '');
-  function prettyWeight(w) {
-    const s = String(w || '').trim();
-    if (!s) return '';
-    if (/^choose$/i.test(s)) return 'podľa seba';
-    if (/^[\d\s.,\-–+]+$/.test(s)) return s.replace(/-/g, '–') + ' kg';
-    return s;
-  }
-  function weightParts(w) {
-    const s = String(w || '').trim();
-    if (!s) return [];
-    return s.split(/\s+a\s+|\s*\+\s*|\s*\/\s*|\s*;\s*|\s*&\s*/i).map((seg) => {
-      const m = seg.replace(/\d+\s*[x×]\s*(?=\d)/gi, '').match(/\d+(?:[.,]\d+)?/);
-      return m ? parseFloat(m[0].replace(',', '.')) : null;
-    });
+  const daysAgo = (iso) => Math.round((new Date(new Date().toDateString()) - dateOf(iso)) / 86400000);
+  function agoText(iso) {
+    const n = daysAgo(iso);
+    return n <= 0 ? 'dnes' : n === 1 ? 'včera' : `pred ${n} dňami`;
   }
   function doneSummary(d) {
-    const out = [];
-    if (d.sets) out.push(d.sets === 'Ok' ? 'Ok' : prettySets(d.sets));
-    if (d.weight) out.push(prettyWeight(d.weight));
-    if (d.rpe) out.push('RPE ' + d.rpe);
-    return out.join(' · ');
+    const parts = [];
+    if (d.sets) parts.push(d.sets === 'Ok' ? 'Ok' : prettySets(d.sets));
+    if (d.weight) parts.push(prettyNum(d.weight) + (isNumW(d.weight) ? ' kg' : ''));
+    if (d.rpe) parts.push('RPE ' + prettyNum(d.rpe));
+    return parts.join(' · ');
   }
   function toast(msg) {
     const el = document.getElementById('toast');
     el.textContent = msg;
     el.classList.add('show');
     clearTimeout(toast._t);
-    toast._t = setTimeout(() => el.classList.remove('show'), 2800);
+    toast._t = setTimeout(() => el.classList.remove('show'), 3200);
   }
 
-  // Rovnaké parsovanie hárku ako v apke klienta (stĺpce podľa hlavičiek „EXERCISE n“).
+  // Rozloženie hárku podľa hlavičiek (rovnako ako apka): WEEK n / DAY n / EXERCISE n × 9 stĺpcov.
   function parsePlan(rows) {
     const weeks = [];
     let week = null;
@@ -132,494 +126,311 @@
   }
 
   // ---------------------------------------------------------------------------
-  // Komunikácia so skriptom
+  // Stav
   // ---------------------------------------------------------------------------
-  async function apiGet() {
-    const url = new URL(state.cfg.scriptUrl);
-    url.searchParams.set('token', state.cfg.pass);
-    url.searchParams.set('user', state.cfg.user);
+  const oldCfg = load(KEY.cred, {}) || {};
+  const state = {
+    cred: { user: oldCfg.user || '', pass: oldCfg.pass || '' },
+    clients: load(KEY.clients, null) || (oldCfg.scriptUrl ? [{ id: idFor(oldCfg.scriptUrl), scriptUrl: oldCfg.scriptUrl }] : []),
+    data: {}, // id -> { loading, error, d }
+    history: {}, // id -> { loading, sheets: [{ name, weeks }] }
+    view: 'clients',
+    clientId: null,
+    focus: null, // insight, ktorý zvýrazňuje riadky
+    drawer: null, // { kind: 'ex', key } | { kind: 'body' }
+    pop: null, // { kind: 'note' | 'cell', r, w, top, left }
+    busy: {},
+    loginError: null,
+    localSettings: load(KEY.settings, { pct: 5, steps: {} }),
+  };
+  save('fitko.coach.draft', null); // náhľad zo spec 002 už neexistuje
+  if (oldCfg.scriptUrl) save(KEY.cred, state.cred); // migrácia starého nastavenia
+  save(KEY.clients, state.clients);
+
+  const client = () => state.clients.find((c) => c.id === state.clientId) || null;
+  const dataOf = (id) => (state.data[id] && state.data[id].d) || null;
+
+  // ---------------------------------------------------------------------------
+  // Komunikácia so skriptom klienta
+  // ---------------------------------------------------------------------------
+  async function apiGet(c, sheet) {
+    const url = new URL(c.scriptUrl);
+    url.searchParams.set('token', state.cred.pass);
+    url.searchParams.set('user', state.cred.user);
+    if (sheet) url.searchParams.set('sheet', sheet);
     const res = await fetch(url.toString());
     const data = await res.json();
-    if (!data.ok) throw new Error(data.error || 'Chyba');
+    if (!data.ok) throw new Error(data.error || 'Chyba skriptu');
     if (data.role !== 'coach') throw new Error('Tieto údaje nie sú prihlásenie trénera');
     return data;
   }
-  async function apiPost(body) {
-    const res = await fetch(state.cfg.scriptUrl, {
+  async function apiPost(c, body) {
+    const d = dataOf(c.id);
+    const res = await fetch(c.scriptUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ ...body, sheet: state.data && state.data.sheet, token: state.cfg.pass, user: state.cfg.user }),
+      body: JSON.stringify({ ...body, sheet: d && d.sheet, token: state.cred.pass, user: state.cred.user }),
     });
     return res.json();
   }
 
-  async function reload(keepWeek) {
-    state.loading = true;
-    state.error = null;
-    render();
+  async function loadClient(c, quiet) {
+    const prev = state.data[c.id] || {};
+    state.data[c.id] = { ...prev, loading: true, error: null };
+    if (!quiet) render();
     try {
-      const d = await apiGet();
-      const st = d.settings ? { pct: Number(d.settings.pct), steps: d.settings.steps || {} } : null;
-      state.data = { sheet: d.sheet, title: d.title, weeks: parsePlan(d.rows.map((r) => r.c)), weights: d.weights || [], photos: (d.photos && d.photos.list) || [], settings: st };
-      if (!keepWeek || state.weekIdx == null) state.weekIdx = defaultWeekIdx();
+      const r = await apiGet(c);
+      const d = {
+        sheet: r.sheet, title: r.title || 'Klient', weeks: parsePlan(r.rows.map((x) => x.c)),
+        weights: (r.weights || []).slice().sort((a, b) => (a.date < b.date ? -1 : 1)),
+        photos: ((r.photos && r.photos.list) || []).slice().sort((a, b) => (a.date < b.date ? -1 : 1)),
+        settings: r.settings ? { pct: Number(r.settings.pct), steps: r.settings.steps || {} } : null,
+        version: Number(r.version) || (r.settings ? 2 : 1),
+        historyNames: (r.history || []).filter((n) => n !== r.sheet),
+      };
+      state.data[c.id] = { loading: false, error: null, d };
+      if (c.title !== d.title || c.sheet !== d.sheet) { c.title = d.title; c.sheet = d.sheet; save(KEY.clients, state.clients); }
     } catch (e) {
-      state.error = e.message;
-    } finally {
-      state.loading = false;
-      render();
+      state.data[c.id] = { ...prev, loading: false, error: e.message || String(e) };
     }
+    render();
+    return state.data[c.id];
+  }
+  const loadAll = () => Promise.all(state.clients.map((c) => loadClient(c, true))).then(render);
+
+  // Staršie bloky (skryté hárky) pre graf cviku – raz za otvorenie klienta.
+  async function loadHistory(c) {
+    const d = dataOf(c.id);
+    if (!d || state.history[c.id]) return;
+    state.history[c.id] = { loading: true, sheets: [] };
+    const sheets = [];
+    for (const name of d.historyNames) {
+      try {
+        const r = await apiGet(c, name);
+        const weeks = parsePlan(r.rows.map((x) => x.c));
+        if (weeks.length) sheets.push({ name, weeks });
+      } catch (_) { /* hárok preskočíme */ }
+    }
+    state.history[c.id] = { loading: false, sheets };
+    render();
   }
 
-  // Plán sa otvorí na poslednom naplánovanom týždni – tam tréner reálne pracuje.
-  function defaultWeekIdx() {
-    const weeks = state.data.weeks;
-    for (let k = weeks.length - 1; k >= 0; k--) if (weeks[k].days.some((d) => d.exercises.length)) return k;
-    return 0;
+  // ---------------------------------------------------------------------------
+  // Model plochy: riadky = deň + cvik, stĺpce = týždne
+  // ---------------------------------------------------------------------------
+  const weekHasEx = (w) => w.days.some((d) => d.exercises.length);
+  function weekRange(w) {
+    const dates = w.days.map((d) => d.date).filter(Boolean);
+    return dates.length ? `${formatDate(dates[0], false)} – ${formatDate(dates[dates.length - 1], false)}` : '';
   }
+  function currentWeekIdx(d) {
+    const t = todayIso();
+    const i = d.weeks.findIndex((w) => w.days.some((x) => x.date === t));
+    if (i >= 0 && weekHasEx(d.weeks[i])) return i;
+    for (let k = d.weeks.length - 1; k >= 0; k--) {
+      const dates = d.weeks[k].days.map((x) => x.date).filter(Boolean);
+      if (weekHasEx(d.weeks[k]) && dates.length && dates[0] <= t) return k;
+    }
+    for (let k = d.weeks.length - 1; k >= 0; k--) if (weekHasEx(d.weeks[k])) return k;
+    return -1;
+  }
+  const lastPlannedIdx = (d) => d.weeks.reduce((m, w, i) => (weekHasEx(w) ? i : m), -1);
 
-  // Všetky záznamy cvikov chronologicky (pre „Minule“, graf a prehľad).
-  function entries() {
+  // Všetky záznamy cvikov chronologicky (pre „posledný výkon“ a návrh).
+  function entries(d) {
     const out = [];
-    state.data.weeks.forEach((w, wi) => w.days.forEach((d) => d.exercises.forEach((e) => {
-      out.push({ wi, week: w.n, day: d.n, date: d.date, name: e.name, key: nameKey(e.name), planned: e.planned, done: e.done });
+    d.weeks.forEach((w, wi) => w.days.forEach((day) => day.exercises.forEach((e) => {
+      out.push({ wi, week: w.n, day: day.n, date: day.date, name: e.name, key: nameKey(e.name), planned: e.planned, done: e.done });
     })));
     return out;
   }
-  function lastBefore(name, wi, dayN) {
+  function lastBefore(d, name, wi, dayN) {
     const k = nameKey(name);
-    const list = entries().filter((x) => x.key === k && hasAny(x.done) && (x.wi < wi || (x.wi === wi && x.day < dayN)));
+    const list = entries(d).filter((x) => x.key === k && hasAny(x.done) && (x.wi < wi || (x.wi === wi && x.day < dayN)));
     return list[list.length - 1] || null;
   }
 
-  // ---------------------------------------------------------------------------
-  // Render
-  // ---------------------------------------------------------------------------
-  const app = document.getElementById('app');
-  const ICON = {
-    refresh: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg>',
-    back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>',
-    next: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>',
-    close: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>',
-    trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>',
-    logout: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4h4v16h-4M10 17l5-5-5-5M15 12H3"/></svg>',
-  };
-
-  function render() {
-    const scroll = window.scrollY;
-    const drafts = {};
-    app.querySelectorAll('[data-field]').forEach((el) => { if (el.dataset.dirty) drafts[el.id] = el.value; });
-    let html;
-    if (!state.cfg.scriptUrl) html = renderNoLink();
-    else if (!state.cfg.pass) html = renderLogin(state.error);
-    else if (!state.data) html = state.error ? renderLogin(state.error) : '<div class="empty"><div class="spinner"></div>Načítavam tabuľku…</div>';
-    else html = renderMain();
-    app.innerHTML = html + (state.modal ? renderModal() : '');
-    for (const [id, v] of Object.entries(drafts)) {
-      const el = document.getElementById(id);
-      if (el) { el.value = v; el.dataset.dirty = '1'; markRow(el); }
+  function buildModel(d) {
+    const cols = d.weeks.map((w, wi) => ({ w, wi })).filter(({ w }) => weekHasEx(w));
+    const rows = new Map();
+    cols.forEach(({ w, wi }) => w.days.forEach((day) => day.exercises.forEach((e) => {
+      const key = `${day.n}|${nameKey(e.name)}`;
+      let r = rows.get(key);
+      if (!r) { r = { key, day: day.n, name: e.name, cells: {} }; rows.set(key, r); }
+      r.cells[w.n] = { e, day, w, wi };
+      r.name = e.name;
+      r.order = e.col; // poradie podľa posledného týždňa, v ktorom cvik je
+      r.lastWi = wi;
+    })));
+    const list = [...rows.values()].sort((a, b) => a.day - b.day || b.lastWi - a.lastWi || a.order - b.order);
+    for (const r of list) {
+      const done = cols.map(({ w }) => r.cells[w.n]).filter((c) => c && hasAny(c.e.done)).map((c) => ({ planned: c.e.planned, done: c.e.done }));
+      r.trend = C.trend(r.name, done);
     }
-    document.body.classList.toggle('sheet-open', Boolean(state.modal));
-    window.scrollTo(0, scroll);
+    const days = [...new Set(list.map((r) => r.day))].sort((a, b) => a - b);
+    return { cols, rows: list, days };
   }
 
-  function renderNoLink() {
-    return `<div class="empty"><h2>Fitko · Tréner</h2>Otvor odkaz, ktorý ti poslal klient – obsahuje prepojenie na jeho tabuľku.</div>`;
-  }
-
-  function renderLogin(err) {
-    return `<div class="login">
-      <h1>Fitko · Tréner</h1>
-      <p>Prehľad a plánovanie tréningov nad tou istou Google tabuľkou. Všetko, čo tu zmeníš, je hneď aj v tabuľke.</p>
-      ${err ? `<div class="banner err">${esc(err)}</div>` : ''}
-      <form id="login-form" class="form card" autocomplete="on">
-        <div class="field"><label for="lg-user">Meno</label><input id="lg-user" name="user" autocomplete="username" value="${esc(state.cfg.user)}"></div>
-        <div class="field"><label for="lg-pass">Heslo</label><input id="lg-pass" name="pass" type="password" autocomplete="current-password"></div>
-        <button class="btn" type="submit">Prihlásiť sa</button>
-      </form>
-    </div>`;
-  }
-
-  function renderMain() {
-    const tabs = [['progress', 'Progres'], ['plan', 'Plán'], ['client', 'Klient']];
-    let body = '';
-    if (state.tab === 'progress') body = renderProgress();
-    else if (state.tab === 'plan') body = renderPlan();
-    else body = renderClient();
-    return `
-      <div class="topbar">
-        <h1>${esc(state.data.title || 'Klient')}<span class="sub">Fitko · Tréner · ${esc(state.data.sheet.trim())}${state.loading ? ' · načítavam…' : ''}</span></h1>
-        <button class="icon-btn" data-action="reload" aria-label="Obnoviť">${ICON.refresh}</button>
-        <button class="icon-btn" data-action="logout" aria-label="Odhlásiť">${ICON.logout}</button>
-      </div>
-      ${state.error ? `<div class="banner err">${esc(state.error)}</div>` : ''}
-      <nav class="tabs">${tabs.map(([k, l]) => `<button class="tab ${state.tab === k ? 'on' : ''}" data-action="tab" data-tab="${k}">${l}</button>`).join('')}</nav>
-      ${body}`;
-  }
-
-  // ----- Progres: cviky × týždne -----
-  function renderProgress() {
-    const weeks = state.data.weeks;
-    const cols = weeks.map((w, wi) => ({ w, wi })).filter(({ w }) => w.days.some((d) => d.exercises.length));
-    const order = [];
-    const byKey = {};
-    entries().forEach((x) => {
-      if (!byKey[x.key]) { byKey[x.key] = { name: x.name, cells: {} }; order.push(x.key); }
-      (byKey[x.key].cells[x.wi] = byKey[x.key].cells[x.wi] || []).push(x);
-    });
-    const head = `<tr><th class="sticky">Cvik</th>${cols.map(({ w }) => `<th>T${w.n}<small>${esc(w.days[0] && w.days[0].date ? formatDate(w.days[0].date, false) : '')}</small></th>`).join('')}<th>Trend</th></tr>`;
-    const rows = order.map((k) => {
-      const r = byKey[k];
-      let prev = null, first = null, lastV = null;
-      const tds = cols.map(({ wi }) => {
-        const list = r.cells[wi];
-        if (!list) return '<td class="na"></td>';
-        const parts = list.map((x) => {
-          if (hasAny(x.done)) {
-            const vol = C.totalKg(C.volume(x.name, x.planned, x.done));
-            const byVol = state.metric === 'volume';
-            const v = byVol ? (vol || null) : weightParts(x.done.weight)[0];
-            const shown = byVol ? (vol ? C.formatVolume(vol) : x.done.sets || '✓') : (x.done.weight || x.done.sets || '✓');
-            let cls = '';
-            if (v != null) {
-              if (prev != null) cls = v > prev ? 'up' : v < prev ? 'down' : 'same';
-              prev = v;
-              if (first == null) first = v;
-              lastV = v;
-            }
-            return `<div class="pc ${cls}"><b>${esc(shown)}</b>${x.done.rpe ? `<small>RPE ${esc(x.done.rpe)}</small>` : ''}</div>`;
-          }
-          return `<div class="pc planned">${esc(x.planned.weight && !/choose/i.test(x.planned.weight) ? x.planned.weight : 'plán')}</div>`;
-        });
-        return `<td>${parts.join('')}</td>`;
-      }).join('');
-      const diff = first != null && lastV != null ? lastV - first : null;
-      const trend = diff == null ? '' : diff > 0 ? `<span class="up">↑ +${fmtKg(diff)} kg</span>` : diff < 0 ? `<span class="down">↓ −${fmtKg(-diff)} kg</span>` : '<span class="same">=</span>';
-      return `<tr><th class="sticky"><button class="linkish" data-action="chart" data-name="${esc(r.name)}">${esc(splitParts(r.name).map(cap).join(' + '))}</button></th>${tds}<td class="trend">${trend}</td></tr>`;
-    }).join('');
-    const seg = `<div class="seg" role="group" aria-label="Zobraziť">${[['weight', 'Váha'], ['volume', 'Objem']].map(([k, l]) => `<button class="${state.metric === k ? 'on' : ''}" data-action="metric" data-m="${k}">${l}</button>`).join('')}</div>`;
-    const what = state.metric === 'volume' ? 'Objem (série × opakovania × kg)' : 'Zapísané váhy';
-    return `${seg}<p class="hint">${what} klienta po týždňoch. Zelená = viac ako minule, červená = menej, sivá = zatiaľ len plán. Klikni na cvik pre graf.</p>
-      <div class="ptable-wrap"><table class="grid-table">${head}${rows}</table></div>`;
-  }
-
-  // ----- Plán: úprava týždňa -----
-  function renderPlan() {
-    const dr = draftFor();
-    if (dr && dr.open) return renderSuggest(dr);
-    const weeks = state.data.weeks;
-    const wi = state.weekIdx;
-    const week = weeks[wi];
-    const lastPlanned = weeks.reduce((m, w, i) => (w.days.some((d) => d.exercises.length) ? i : m), -1);
-    const range = week.days[0] && week.days[0].date ? `${formatDate(week.days[0].date)} – ${formatDate(week.days[week.days.length - 1].date)}` : 'zatiaľ bez dátumov';
-    const days = week.days.map((d) => renderPlanDay(week, wi, d)).join('');
-    return `
-      <div class="weekbar">
-        <button class="icon-btn" data-action="week" data-dir="-1" ${wi <= 0 ? 'disabled' : ''} aria-label="Predchádzajúci týždeň">${ICON.back}</button>
-        <div class="label">Týždeň ${week.n}<small>${esc(range)}</small></div>
-        <button class="icon-btn" data-action="week" data-dir="1" ${wi >= weeks.length - 1 ? 'disabled' : ''} aria-label="Ďalší týždeň">${ICON.next}</button>
-      </div>
-      ${wi === lastPlanned ? `<div class="plan-next">
-        <button class="btn suggest-week" data-action="sg-open" data-from="${week.n}">${dr && dr.from === week.n ? 'Pokračovať v návrhu ďalšieho týždňa' : `Navrhnúť ďalší týždeň <span>podľa výkonov klienta · cieľ ${C.formatPct(settings().pct / 100)} objemu</span>`}</button>
-        <button class="btn ghost copy-week" data-action="copy-week" data-from="${week.n}" ${state.busy.copy ? 'disabled' : ''}>${state.busy.copy ? 'Kopírujem…' : `Kópia bez zmien`}</button>
-      </div>` : ''}
-      <div class="plan-days">${days}</div>`;
-  }
-
-  function renderPlanDay(week, wi, d) {
-    const key = `${week.n}|${d.n}`;
-    const used = new Set(d.exercises.map((e) => e.col));
-    const pending = (state.newRows[key] || []).filter((c) => !used.has(c));
-    const free = d.slots.filter((c) => !used.has(c) && !pending.includes(c));
-    const rows = d.exercises.map((e) => renderPlanRow(week, wi, d, e)).join('') +
-      pending.map((col) => renderPlanRow(week, wi, d, { col, name: '', planned: { sets: '', weight: '', rpe: '', note: '' }, done: {} }, true)).join('');
-    const weeks = state.data.weeks;
-    const busy = state.busy.copyDay;
-    // Kopírovanie dňa: z najbližšieho skoršieho týždňa (do prázdneho dňa) alebo do ďalšieho týždňa.
-    let copyFrom = '';
-    if (!d.exercises.length && !pending.length) {
-      for (let k = wi - 1; k >= 0; k--) {
-        const sd = weeks[k].days.find((x) => x.n === d.n);
-        if (sd && sd.exercises.length) {
-          const prev = sd.exercises.map((e) => cap(splitParts(e.name)[0])).slice(0, 3).join(', ');
-          copyFrom = `<button class="copy-day" data-action="copy-day" data-src="${k}" data-dst="${wi}" data-day="${d.n}" ${busy ? 'disabled' : ''}>↺ Skopírovať Deň ${d.n} z týždňa ${weeks[k].n} <span>${sd.exercises.length} cvikov: ${esc(prev)}${sd.exercises.length > 3 ? '…' : ''}</span></button>`;
-          break;
-        }
+  const noteId = (w, day, e) => `${w}|${day}|${e.col}|${e.done.note}`;
+  function insightsOf(c, d, model) {
+    const seen = new Set(load(seenKey(c.id), []));
+    const g = { up: [], same: [], down: [], fatigue: [], notes: [], unseen: [] };
+    for (const r of model.rows) {
+      if (r.trend.kind === 'up') g.up.push(r.key);
+      else if (r.trend.kind === 'down') g.down.push(r.key);
+      else if (r.trend.kind === 'same') g.same.push(r.key);
+      if (r.trend.fatigue) g.fatigue.push(r.key);
+      for (const cell of Object.values(r.cells)) {
+        const id = noteId(cell.w.n, cell.day.n, cell.e);
+        if (cell.e.done.note && !seen.has(id)) { if (!g.notes.includes(r.key)) g.notes.push(r.key); g.unseen.push(id); }
       }
     }
-    let copyTo = '';
-    const nextWeek = weeks[wi + 1];
-    const nd = nextWeek && nextWeek.days.find((x) => x.n === d.n);
-    if (d.exercises.length && nd && !nd.exercises.length) {
-      copyTo = `<button class="copy-next" data-action="copy-day" data-src="${wi}" data-dst="${wi + 1}" data-day="${d.n}" ${busy ? 'disabled' : ''}>→ Skopírovať do týždňa ${nextWeek.n}</button>`;
-    }
-    const progress = busy && busy.key === `${weeks[busy.dst].n}|${d.n}` || busy && busy.srcKey === key ? `<span class="copy-progress">Kopírujem ${busy.done}/${busy.total}…</span>` : '';
-    return `<section class="pday ${d.exercises.length || pending.length ? '' : 'rest'}">
-      <div class="pday-head"><b>Deň ${d.n}</b> <span>${esc(formatDate(d.date))}</span>${d.exercises.length || pending.length ? '' : ' <span class="muted">· voľno</span>'}${copyTo}${progress}</div>
-      ${rows ? `<div class="prow-head"><span>Cvik</span><span>Série × opak.</span><span>Váha</span><span>RPE</span><span>Poznámka pre klienta</span><span></span></div>${rows}` : ''}
-      ${copyFrom}
-      ${free.length ? `<button class="add-ex" data-action="add-ex" data-key="${key}" data-col="${free[0]}">+ Pridať cvik</button>` : ''}
-    </section>`;
+    return g;
+  }
+  function markNotesSeen(c) {
+    const d = dataOf(c.id);
+    if (!d) return;
+    const ids = [];
+    d.weeks.forEach((w) => w.days.forEach((day) => day.exercises.forEach((e) => { if (e.done.note) ids.push(noteId(w.n, day.n, e)); })));
+    save(seenKey(c.id), ids);
   }
 
-  function renderPlanRow(week, wi, d, e, isNew) {
-    const id = `${week.n}-${d.n}-${e.col}`;
-    const last = e.name ? lastBefore(e.name, wi, d.n) : null;
-    const f = (k, ph, cls) => `<input id="f-${k}-${id}" class="${cls || ''}" data-field="${k}" data-row="${id}" value="${esc(k === 'name' ? e.name : e.planned[k])}" placeholder="${esc(ph)}" autocomplete="off">`;
-    const info = [];
-    if (hasAny(e.done) || (e.done && e.done.note)) info.push(`<span class="cl">Klient tento týždeň: <b>${esc(doneSummary(e.done) || '—')}</b>${e.done.note ? ` – „${esc(e.done.note)}“` : ''}</span>`);
-    if (last) info.push(`<span class="ls">Minule (T${last.week}): <b>${esc(doneSummary(last.done))}</b></span>`);
-    const canRemove = !isNew && !hasAny(e.done) && !(e.done && e.done.note);
-    return `<div class="prow ${isNew ? 'new' : ''}" id="row-${id}" data-week="${week.n}" data-day="${d.n}" data-col="${e.col}" data-expect="${esc(isNew ? '' : e.name)}">
-      ${f('name', 'Názov cviku', 'nm')}${f('sets', '2x8')}${f('weight', 'kg / CHOOSE')}${f('rpe', '7-8')}${f('note', 'Poznámka')}
-      <div class="pactions">
-        <button class="btn small" data-action="save-row" data-row="${id}" disabled>Uložiť</button>
-        ${canRemove ? `<button class="icon-btn small" data-action="remove-row" data-row="${id}" aria-label="Odstrániť cvik">${ICON.trash}</button>` : ''}
-        ${isNew ? `<button class="icon-btn small" data-action="cancel-row" data-row="${id}" aria-label="Zrušiť">${ICON.close}</button>` : ''}
-      </div>
-      ${info.length ? `<div class="pinfo">${info.join('')}</div>` : ''}
-    </div>`;
+  // Stav týždňa: koľko tréningových dní má niečo zapísané, posledný tréning, čo čaká.
+  function weekStatus(d) {
+    const wi = currentWeekIdx(d);
+    if (wi < 0) return null;
+    const w = d.weeks[wi];
+    const days = w.days.filter((x) => x.exercises.length);
+    const doneDays = days.filter((x) => x.exercises.some((e) => hasAny(e.done)));
+    const next = days.find((x) => !x.exercises.some((e) => hasAny(e.done)));
+    let last = null;
+    d.weeks.forEach((ww) => ww.days.forEach((x) => { if (x.date && x.exercises.some((e) => hasAny(e.done)) && (!last || x.date > last)) last = x.date; }));
+    return { w, done: doneDays.length, total: days.length, next, last };
+  }
+  function weightStatus(d) {
+    const ws = d.weights;
+    if (!ws.length) return null;
+    const last = ws[ws.length - 1];
+    const ref = ws.filter((x) => x.date <= isoPlus(last.date, -7)).pop();
+    const avg = (from) => { const v = ws.filter((x) => x.date >= from).map((x) => x.kg); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; };
+    return { last, diff: ref ? last.kg - ref.kg : null, avg7: avg(isoPlus(todayIso(), -6)), avg30: avg(isoPlus(todayIso(), -29)), recent: ws.filter((x) => x.date >= isoPlus(todayIso(), -29)) };
   }
 
-  // ----- Klient: váha, fotky, poznámky -----
-  function renderClient() {
-    const ws = state.data.weights.slice().sort((a, b) => (a.date < b.date ? -1 : 1));
-    const today = isoDate(new Date());
-    const minus = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return isoDate(d); };
-    const avg = (from) => { const v = ws.filter((w) => w.date >= from && w.date <= today).map((w) => w.kg); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; };
-    const a7 = avg(minus(6)), a30 = avg(minus(29));
-    const notes = entries().filter((x) => x.done.note).reverse().slice(0, 25);
-    return `<div class="client-grid">
-      <section class="card">
-        <h3>Ranná váha</h3>
-        <div class="tiles">
-          <div class="tile"><div class="tile-v">${ws.length ? fmtKg(ws[ws.length - 1].kg) : '–'}</div><div class="tile-k">posledná${ws.length ? ' · ' + formatDate(ws[ws.length - 1].date, false) : ''}</div></div>
-          <div class="tile"><div class="tile-v">${a7 != null ? fmtKg(a7) : '–'}</div><div class="tile-k">priemer 7 dní</div></div>
-          <div class="tile"><div class="tile-v">${a30 != null ? fmtKg(a30) : '–'}</div><div class="tile-k">priemer 30 dní</div></div>
-        </div>
-        ${ws.length ? `<div style="margin-top:12px">${chartSvg(ws.slice(-90).map((w) => ({ date: w.date, value: w.kg })), 'w')}</div>` : '<p class="hint">Klient zatiaľ nezapísal váhu.</p>'}
-      </section>
-      <section class="card">
-        <h3>Fotky progresu</h3>
-        ${state.data.photos.length ? `<div class="plist">${state.data.photos.slice().reverse().map((p) => `<a class="prow-link" href="${esc(p.url)}" target="_blank" rel="noopener"><span>${esc(formatDate(p.date))}</span><span class="muted">${p.count} ${p.count === 1 ? 'fotka' : p.count < 5 ? 'fotky' : 'fotiek'}</span><span class="accent">Otvoriť ›</span></a>`).join('')}</div>` : '<p class="hint">Zatiaľ žiadne fotky.</p>'}
-      </section>
-      <section class="card wide">
-        <h3>Poznámky klienta k cvikom</h3>
-        ${notes.length ? `<div class="notes">${notes.map((x) => `<div class="note"><span class="muted">T${x.week} · Deň ${x.day}${x.date ? ' · ' + formatDate(x.date, false) : ''}</span><b>${esc(splitParts(x.name).map(cap).join(' + '))}</b><span>„${esc(x.done.note)}“</span></div>`).join('')}</div>` : '<p class="hint">Zatiaľ žiadne poznámky.</p>'}
-      </section>
-    </div>`;
-  }
-
-  // ----- Návrh ďalšieho týždňa (specs/002-next-week-suggestions) -----
-  function settings() { return (state.data && state.data.settings) || state.localSettings; }
-  const scriptSupportsSuggest = () => Boolean(state.data && state.data.settings);
-  const stepFor = (name) => Number(settings().steps[nameKey(name)]) || 2.5;
-  function draftFor() {
-    const d = state.draft;
-    return d && state.data && d.sheet === state.data.sheet && state.data.weeks.some((w) => w.n === d.from) ? d : null;
-  }
-  function saveDraft() { save(DRAFT_KEY, state.draft); }
-  const decision = (key) => (state.draft && state.draft.rows[key]) || { mode: 'auto' };
-  function setDecision(key, dec) {
-    state.draft.rows[key] = dec;
-    saveDraft();
+  // ---------------------------------------------------------------------------
+  // Nastavenia progresie (cieľ %, krok pri cviku) – v tabuľke, pri starom skripte lokálne
+  // ---------------------------------------------------------------------------
+  const settingsOf = (d) => (d && d.settings) || state.localSettings;
+  const stepFor = (d, name) => Number(settingsOf(d).steps[nameKey(name)]) || 2.5;
+  async function saveSetting(c, key, value) {
+    const d = dataOf(c.id);
+    const st = settingsOf(d);
+    if (key === 'progres_percent') st.pct = value; else st.steps[key.slice(5)] = value;
     render();
-  }
-
-  async function saveSetting(key, value) {
-    const st = settings();
-    if (key === 'progres_percent') st.pct = value;
-    else st.steps[key.slice(5)] = value;
-    if (!scriptSupportsSuggest()) { save(SETTINGS_KEY, state.localSettings); render(); return; }
-    render();
+    if (!d || !d.settings) { save(KEY.settings, state.localSettings); return; }
     try {
-      const out = await apiPost({ op: 'setting', key, value });
+      const out = await apiPost(c, { op: 'setting', key, value });
       if (!out.ok) throw new Error(out.error);
     } catch (err) { toast('Nastavenie sa neuložilo do tabuľky: ' + err.message); }
   }
 
-  // Riadky návrhu: pre každý cvik zdrojového týždňa výkon klienta a návrh z FitkoCalc.
-  function suggestionRows() {
-    const dr = draftFor();
-    if (!dr) return [];
-    const weeks = state.data.weeks;
-    const wi = weeks.findIndex((w) => w.n === dr.from);
-    const pct = settings().pct / 100;
+  // ---------------------------------------------------------------------------
+  // Rozpracovaný týždeň (posledný stĺpec)
+  // ---------------------------------------------------------------------------
+  function getDraft(c) {
+    const d = c && dataOf(c.id);
+    const dr = c && load(draftKey(c.id), null);
+    return dr && d && dr.sheet === d.sheet && d.weeks.some((w) => w.n === dr.from) ? dr : null;
+  }
+  const putDraft = (c, dr) => save(draftKey(c.id), dr);
+
+  function expectedTarget(d, wi) {
+    for (let k = wi + 1; k < d.weeks.length; k++) if (!weekHasEx(d.weeks[k])) return d.weeks[k].n;
+    return Math.max(...d.weeks.map((w) => w.n)) + 1;
+  }
+
+  // Návrhy pre cviky zdrojového týždňa (rovnaké pravidlá ako spec 002 – calc.js).
+  function draftRows(c, d, dr) {
+    const wi = d.weeks.findIndex((w) => w.n === dr.from);
+    const pct = settingsOf(d).pct / 100;
     const out = [];
-    for (const d of weeks[wi].days) {
-      for (const e of d.exercises) {
-        // Výkon: tento týždeň, inak posledný zápis toho istého cviku pred ním.
-        const src = hasAny(e.done) ? { planned: e.planned, done: e.done, wi, day: d.n, week: weeks[wi].n } : lastBefore(e.name, wi, d.n);
-        const prev = src ? lastBefore(e.name, src.wi, src.day) : null;
+    for (const day of d.weeks[wi].days) {
+      for (const e of day.exercises) {
+        const src = hasAny(e.done) ? { planned: e.planned, done: e.done, wi, day: day.n, week: dr.from } : lastBefore(d, e.name, wi, day.n);
+        const prev = src ? lastBefore(d, e.name, src.wi, src.day) : null;
         const s = C.suggest({
           name: e.name, planned: e.planned, done: src ? src.done : {},
           prevMissed: prev ? C.missed(e.name, prev.planned, prev.done) : false,
-          step: stepFor(e.name), pct,
+          step: stepFor(d, e.name), pct,
         });
-        out.push({ key: `${d.n}|${e.col}`, d, e, src, s });
+        const key = `${day.n}|${e.col}`;
+        const st = dr.rows[key] || {};
+        const fields = st.edited && st.fields ? { ...st.fields } : dr.mode === 'copy' ? { ...e.planned } : { ...s.fields };
+        out.push({ key, day, e, src, s, st, fields, skip: Boolean(st.skip), rowKey: `${day.n}|${nameKey(e.name)}` });
       }
     }
     return out;
   }
-
-  function finalOf(r) {
-    const dec = decision(r.key);
-    if (dec.mode === 'keep') return { mode: 'keep', f: { ...r.e.planned } };
-    if (dec.mode === 'edit' && dec.fields) return { mode: 'edit', f: { ...dec.fields } };
-    const alt = dec.mode === 'alt' && r.s.alternatives.find((a) => a.label === dec.alt);
-    if (alt) return { mode: 'alt', alt, f: { ...r.s.fields, ...alt.fields } };
-    return { mode: 'auto', f: { ...r.s.fields } };
+  function draftChanges(drows, dr) {
+    return drows.filter((r) => r.skip || !sameFields(r.fields, r.e.planned)).length + (dr.extra || []).filter((x) => x.fields.name.trim()).length;
   }
-  const FIELDS = ['sets', 'weight', 'rpe', 'note'];
-  const sameFields = (a, b) => FIELDS.every((k) => String(a[k] || '').trim() === String(b[k] || '').trim());
-
-  // Objem pred (výkon klienta) a po (návrh) – súčet kg častí.
-  function rowVolumes(r, fin) {
-    const base = C.totalKg(r.s.parts.map((p) => p.base));
-    let next;
-    if (fin.mode === 'auto') next = C.totalKg(r.s.parts.map((p) => p.proposed));
-    else if (fin.mode === 'alt') next = fin.alt.unit === 'kg' ? fin.alt.value : 0;
-    else next = C.totalKg(C.volume(r.e.name, fin.f, fin.f));
-    return { base, next };
+  function freeSlot(d, dr, dayN) {
+    const w = d.weeks.find((x) => x.n === dr.from);
+    const day = w && w.days.find((x) => x.n === dayN);
+    if (!day) return null;
+    const used = new Set(day.exercises.map((e) => e.col).concat((dr.extra || []).filter((x) => x.day === dayN).map((x) => x.col)));
+    return day.slots.find((col) => !used.has(col)) || null;
+  }
+  function doneSignature(d, from) {
+    const wi = d.weeks.findIndex((w) => w.n === from);
+    return JSON.stringify([d.weeks[wi - 1], d.weeks[wi]].filter(Boolean).map((w) => w.days.map((x) => x.exercises.map((e) => [e.col, e.name, e.done]))));
   }
 
-  function expectedTarget(wi) {
-    const weeks = state.data.weeks;
-    for (let k = wi + 1; k < weeks.length; k++) if (weeks[k].days.every((d) => !d.exercises.length)) return weeks[k].n;
-    return Math.max(...weeks.map((w) => w.n)) + 1;
-  }
-
-  const pctHtml = (base, next) => {
-    if (!(base > 0) || !(next > 0)) return '';
-    const p = next / base - 1;
-    return `<span class="pct ${p > 0.0005 ? 'up' : p < -0.0005 ? 'down' : 'same'}">${esc(C.formatPct(p))}</span>`;
-  };
-  const fieldsTxt = (f) => [f.sets && prettySets(f.sets), f.weight && prettyWeight(f.weight), f.rpe && 'RPE ' + f.rpe].filter(Boolean).join(' · ') || '—';
-  const kgTxt = (v) => (v > 0 ? `${C.formatVolume(v)} kg` : '–');
-
-  function renderSuggest(dr) {
-    const weeks = state.data.weeks;
-    const wi = weeks.findIndex((w) => w.n === dr.from);
-    const rows = suggestionRows();
-    const target = dr.target || expectedTarget(wi);
-    const st = settings();
-    let changed = 0, review = 0, sumBase = 0, sumNext = 0;
-    const byDay = new Map();
-    for (const r of rows) {
-      const fin = finalOf(r);
-      const vol = rowVolumes(r, fin);
-      const isChanged = !sameFields(fin.f, r.e.planned);
-      if (isChanged) changed++;
-      if (r.s.review && fin.mode === 'auto') review++;
-      if (vol.base > 0 && vol.next > 0) { sumBase += vol.base; sumNext += vol.next; }
-      if (!byDay.has(r.d.n)) byDay.set(r.d.n, []);
-      byDay.get(r.d.n).push(renderSuggestRow(r, fin, vol, isChanged, dr));
-    }
-    const failed = (dr.failed || []).map((f) => {
-      const r = rows.find((x) => x.key === f.key);
-      return `<li><b>Deň ${esc(f.key.split('|')[0])} · ${esc(r ? splitParts(r.e.name).map(cap).join(' + ') : f.key)}</b> – ${esc(f.error || 'chyba')}</li>`;
-    }).join('');
-    const days = [...byDay.entries()].map(([n, html]) => {
-      const d = weeks[wi].days.find((x) => x.n === n);
-      return `<section class="sg-day"><div class="pday-head"><b>Deň ${n}</b> <span>${esc(formatDate(d.date))} → o týždeň neskôr</span></div>${html.join('')}</section>`;
-    }).join('');
-    const busy = state.busy.apply;
-    return `
-      <div class="sg-head">
-        <button class="icon-btn" data-action="sg-close" aria-label="Späť na plán">${ICON.back}</button>
-        <div><h2>Návrh: týždeň ${target}</h2><span>podľa výkonov klienta v týždni ${dr.from} · do tabuľky sa zapíše až po potvrdení</span></div>
-      </div>
-      ${!scriptSupportsSuggest() ? `<div class="banner warn"><div><b>Na vloženie treba aktualizovať Apps Script</b> (návod v README – „Keď skript neskôr upravíš“). Návrh si môžeš pozrieť aj teraz.</div></div>` : ''}
-      ${dr.stale ? `<div class="banner warn"><div><b>Klient medzitým zapísal nové výsledky.</b> Návrh sa prepočítal – skontroluj ho a vlož znova.</div></div>` : ''}
-      ${failed ? `<div class="banner err"><div><b>Týždeň ${dr.target} je v tabuľke, ale tieto cviky sa nezapísali:</b><ul class="sg-failed">${failed}</ul></div><button data-action="sg-retry" ${busy ? 'disabled' : ''}>Skúsiť znova</button></div>` : ''}
-      <div class="sg-bar card">
-        <div class="sg-pct"><span>Cieľový rast objemu</span><div class="chips">${PCT_OPTIONS.map((v) => `<button class="chip ${Number(st.pct) === v ? 'on' : ''}" data-action="sg-pct" data-v="${v}">${String(v).replace('.', ',')} %</button>`).join('')}</div></div>
-        <div class="tiles">
-          <div class="tile"><div class="tile-v">${changed}<small>/${rows.length}</small></div><div class="tile-k">zmenených</div></div>
-          <div class="tile ${review ? 'warn' : ''}"><div class="tile-v">${review}</div><div class="tile-k">na kontrolu</div></div>
-          <div class="tile"><div class="tile-v">${sumBase > 0 ? esc(C.formatPct(sumNext / sumBase - 1)) : '–'}</div><div class="tile-k">objem týždňa</div></div>
-        </div>
-        <div class="sg-bulk">
-          <button class="btn small ghost" data-action="sg-all" data-mode="auto">Prijať všetky návrhy</button>
-          <button class="btn small ghost" data-action="sg-all" data-mode="keep">Ponechať všetko</button>
-        </div>
-      </div>
-      <div class="plan-days">${days || '<p class="hint">V týždni nie sú žiadne cviky.</p>'}</div>
-      <div class="sg-footer">
-        <button class="btn" data-action="${failed ? 'sg-retry' : 'sg-apply'}" ${busy || !scriptSupportsSuggest() ? 'disabled' : ''}>${busy ? 'Vkladám do tabuľky…' : failed ? 'Vložiť chýbajúce cviky' : `Vložiť do tabuľky · týždeň ${target}${changed ? ` (${changed} zmien)` : ''}`}</button>
-        <button class="btn ghost" data-action="sg-discard" ${busy ? 'disabled' : ''}>Zahodiť návrh</button>
-      </div>`;
-  }
-
-  function renderSuggestRow(r, fin, vol, isChanged, dr) {
-    const id = `sg-${r.d.n}-${r.e.col}`;
-    const src = r.src;
-    const badge = fin.mode === 'edit' ? ['edit', 'Upravené']
-      : fin.mode === 'keep' ? ['keep', 'Ponechané']
-      : r.s.review && fin.mode === 'auto' ? ['review', 'Na kontrolu']
-      : fin.mode === 'alt' ? ['alt', 'Alternatíva']
-      : r.s.rule === 'R3' && isChanged ? ['down', '↓ Ľahšie']
-      : (r.s.rule === 'R5' || r.s.rule === 'R6') && vol.base > 0 && vol.next > vol.base * 1.0005 ? ['up', '↑ Progres']
-      : isChanged ? ['up', 'Zmena'] : ['same', 'Bez zmeny'];
-    const weighted = r.s.parts.some((p) => (p.base && p.base.unit === 'kg') || (p.proposed && p.proposed.unit === 'kg'));
-    const step = stepFor(r.e.name);
-    const input = (k, label, ph) => `<label class="sg-f sg-f-${k}"><span>${label}</span><input id="${id}-${k}" data-sg="${k}" data-key="${r.key}" value="${esc(fin.f[k] || '')}" placeholder="${esc(ph)}" autocomplete="off"></label>`;
-    const alts = r.s.alternatives.map((a) => {
-      const on = fin.mode === 'alt' && fin.alt.label === a.label;
-      return `<button class="sg-alt ${on ? 'on' : ''}" data-action="sg-alt" data-key="${r.key}" data-label="${esc(a.label)}">${esc(a.label)}<small>${esc(fieldsTxt(a.fields))} · ${esc(C.formatPct(a.pct))}</small></button>`;
-    }).join('');
-    return `<div class="sg-row sg-${badge[0]} ${isChanged ? 'changed' : ''}" id="${id}">
-      <div class="sg-top"><b class="sg-name">${esc(splitParts(r.e.name).map(cap).join(' + '))}</b><span class="sg-badge">${badge[1]}</span></div>
-      <div class="sg-lines">
-        <div><span class="k">Plán T${dr.from}</span><span>${esc(fieldsTxt(r.e.planned))}</span></div>
-        <div><span class="k">Klient${src && src.week !== dr.from ? ` T${src.week}` : ''}</span><span>${src ? `<b>${esc(doneSummary(src.done) || '—')}</b>${vol.base > 0 ? ` <span class="muted">· objem ${kgTxt(vol.base)}</span>` : ''}` : '<span class="muted">bez zápisu</span>'}</span></div>
-        ${src && src.done.note ? `<div class="sg-cnote">Poznámka klienta: „${esc(src.done.note)}“</div>` : ''}
-      </div>
-      <div class="sg-edit">
-        ${input('sets', 'Série × opak.', '2x8')}${input('weight', 'Váha', 'kg')}${input('rpe', 'RPE', '7-8')}${input('note', 'Poznámka pre klienta', '')}
-      </div>
-      <div class="sg-vol">Objem ${kgTxt(vol.base)} → <b>${kgTxt(vol.next)}</b> ${pctHtml(vol.base, vol.next)}</div>
-      ${fin.mode === 'auto' || fin.mode === 'alt' ? `<div class="sg-reason">${esc(r.s.reason)}</div>` : ''}
-      <div class="sg-actions">
-        ${alts}
-        ${fin.mode !== 'auto' ? `<button class="sg-link" data-action="sg-auto" data-key="${r.key}">Späť na návrh</button>` : ''}
-        ${fin.mode !== 'keep' ? `<button class="sg-link" data-action="sg-keep" data-key="${r.key}">Ponechať ako T${dr.from}</button>` : ''}
-        ${weighted ? `<label class="sg-step">Krok <select data-sg-step="${esc(nameKey(r.e.name))}">${STEP_OPTIONS.map((v) => `<option value="${v}" ${v === step ? 'selected' : ''}>${fmtKg(v)} kg</option>`).join('')}${STEP_OPTIONS.includes(step) ? '' : `<option selected value="${step}">${fmtKg(step)} kg</option>`}</select></label>` : ''}
-      </div>
-    </div>`;
-  }
-
-  // Podpis výsledkov klienta v zdrojovom a predošlom týždni – zmena = treba prepočítať.
-  function doneSignature(fromN) {
-    const weeks = state.data.weeks;
-    const wi = weeks.findIndex((w) => w.n === fromN);
-    return JSON.stringify([weeks[wi - 1], weeks[wi]].filter(Boolean).map((w) => w.days.map((d) => d.exercises.map((e) => [e.col, e.name, e.done]))));
-  }
-
-  async function applySuggestion(retry) {
-    const dr = draftFor();
-    if (!dr || state.busy.apply) return;
-    state.busy.apply = true;
+  async function sendDraft(c, retry) {
+    let d = dataOf(c.id);
+    let dr = getDraft(c);
+    if (!d || !dr || state.busy.send) return;
+    state.busy.send = true;
     render();
-    const lastN = () => state.data.weeks.reduce((m, w) => (w.days.some((d) => d.exercises.length) ? Math.max(m, w.n) : m), 0);
+    const lastN = () => { const dd = dataOf(c.id); return dd ? dd.weeks.reduce((m, w) => (weekHasEx(w) ? Math.max(m, w.n) : m), 0) : 0; };
     const beforeLast = lastN();
     try {
       // Klient mohol medzitým zapísať výsledky – načítaj aktuálne dáta a porovnaj.
-      const sigBefore = doneSignature(dr.from);
-      await reload(true);
-      if (!state.data || !draftFor()) throw new Error(state.error || 'Nepodarilo sa načítať tabuľku');
-      if (!retry && doneSignature(dr.from) !== sigBefore) { dr.stale = true; saveDraft(); return; }
+      const sig = doneSignature(d, dr.from);
+      await loadClient(c, true);
+      d = dataOf(c.id);
+      dr = getDraft(c);
+      if (!d || !dr) throw new Error(state.data[c.id].error || 'Nepodarilo sa načítať tabuľku');
+      if (!retry && doneSignature(d, dr.from) !== sig) { dr.stale = true; putDraft(c, dr); return; }
       dr.stale = false;
-      const rows = suggestionRows();
       const failedKeys = new Set((dr.failed || []).map((f) => f.key));
-      const send = rows.filter((r) => (retry ? failedKeys.has(r.key) : !sameFields(finalOf(r).f, r.e.planned)))
-        .map((r) => ({ day: r.d.n, col: r.e.col, expect: r.e.name, fields: finalOf(r).f, key: r.key }));
+      const want = (k, changed) => (retry ? failedKeys.has(k) : changed);
+      const send = [];
+      for (const r of draftRows(c, d, dr)) {
+        if (r.skip) {
+          if (want(r.key, true)) send.push({ key: r.key, day: r.day.n, col: r.e.col, expect: r.e.name, fields: { name: '', sets: '', weight: '', rpe: '', note: '' } });
+          continue;
+        }
+        if (want(r.key, !sameFields(r.fields, r.e.planned))) {
+          send.push({ key: r.key, day: r.day.n, col: r.e.col, expect: r.e.name, fields: { sets: r.fields.sets, weight: r.fields.weight, rpe: r.fields.rpe, note: r.fields.note } });
+        }
+      }
+      for (const x of dr.extra || []) {
+        const k = 'x:' + x.id;
+        if (x.fields.name.trim() && want(k, true)) {
+          send.push({ key: k, day: x.day, col: x.col, expect: '', fields: { name: x.fields.name.trim().toUpperCase(), sets: x.fields.sets, weight: x.fields.weight, rpe: x.fields.rpe, note: x.fields.note } });
+        }
+      }
       let out;
       try {
-        out = await apiPost({ op: 'applyWeek', from: dr.from, target: dr.target || undefined, rows: send.map(({ key, ...x }) => x) });
+        out = await apiPost(c, { op: 'applyWeek', from: dr.from, target: dr.target || undefined, rows: send.map(({ key, ...rest }) => rest) });
       } catch (err) {
-        // Spojenie spadlo – mohol sa týždeň už vytvoriť? Nech ďalší pokus nevytvorí druhý.
-        await reload(true);
-        if (state.data && lastN() > beforeLast && !dr.target) { dr.target = lastN(); dr.failed = send.map((x) => ({ key: x.key, error: 'Spojenie sa prerušilo' })); saveDraft(); }
+        // Spojenie spadlo – ak sa týždeň už vytvoril, ďalší pokus nesmie vytvoriť druhý.
+        await loadClient(c, true);
+        if (dataOf(c.id) && lastN() > beforeLast && !dr.target) {
+          dr.target = lastN();
+          dr.failed = send.map((x) => ({ key: x.key, error: 'Spojenie sa prerušilo' }));
+          putDraft(c, dr);
+        }
         throw err;
       }
       if (!out.ok) throw new Error(/Neznáma operácia/.test(out.error || '') ? 'Apps Script je starý – aktualizuj ho podľa README' : out.error);
@@ -627,283 +438,656 @@
       const failed = (out.results || []).map((res, i) => (res.ok ? null : { key: send[i].key, error: res.error })).filter(Boolean);
       if (failed.length) {
         dr.failed = failed;
-        saveDraft();
-        await reload(true);
-        toast(`Týždeň ${out.week} je v tabuľke, ${failed.length} cvikov sa nezapísalo`);
+        putDraft(c, dr);
+        await loadClient(c, true);
+        toast(`Týždeň ${out.week} je v tabuľke, ${failed.length} ${plural(failed.length, 'cvik sa nezapísal', 'cviky sa nezapísali', 'cvikov sa nezapísalo')}`);
         return;
       }
-      state.draft = null;
-      saveDraft();
-      await reload(true);
-      const idx = state.data.weeks.findIndex((w) => w.n === out.week);
-      if (idx >= 0) state.weekIdx = idx;
-      window.scrollTo(0, 0);
-      toast(`Týždeň ${out.week} naplánovaný ✓ · zapísaných zmien: ${send.length}`);
+      putDraft(c, null);
+      await loadClient(c, true);
+      toast(`Týždeň ${out.week} je u klienta ✓`);
     } catch (err) {
-      toast('Nepodarilo sa vložiť: ' + err.message);
+      toast('Nepodarilo sa odoslať: ' + err.message);
     } finally {
-      state.busy.apply = false;
+      state.busy.send = false;
       render();
     }
   }
 
-  // ----- Graf -----
-  function renderModal() {
-    const name = state.modal.name;
-    const parts = splitParts(name);
-    const k = nameKey(name);
-    const list = entries().filter((x) => x.key === k && hasAny(x.done));
-    const volPts = list.map((x) => {
-      const v = C.totalKg(C.volume(x.name, x.planned, x.done));
-      return v > 0 ? { date: x.date, value: v, week: x.week } : null;
-    }).filter(Boolean);
-    const charts = state.metric === 'volume'
-      ? `<div class="chart-title">Objem (kg)</div>${volPts.length ? chartSvg(volPts, 0) : '<p class="hint">Bez zapísaných sérií a váh.</p>'}`
-      : parts.map((p, pi) => {
-      const pts = list.map((x) => {
-        const w = weightParts(x.done.weight);
-        const v = w.length === 1 && parts.length > 1 ? (pi === 0 ? w[0] : null) : w[pi];
-        return v > 0 ? { date: x.date, value: v, week: x.week } : null;
-      }).filter(Boolean);
-      return `${parts.length > 1 ? `<div class="chart-title">${esc(cap(p))}</div>` : ''}${pts.length ? chartSvg(pts, pi) : '<p class="hint">Bez zapísaných váh.</p>'}`;
-    }).join('');
-    const rows = list.slice().reverse().map((x) => `<tr><td>T${x.week} · ${esc(x.date ? formatDate(x.date, false) : 'D' + x.day)}</td><td>${esc(x.done.sets === 'Ok' ? 'Ok' : prettySets(x.done.sets))}</td><td><b>${esc(x.done.weight)}</b></td><td>${esc(x.done.rpe || '–')}</td><td class="muted">${esc(x.done.note || '')}</td></tr>`).join('');
-    return `<div class="sheet-backdrop" data-action="close-modal"><div class="sheet wide-sheet" role="dialog">
-      <div class="sheet-head"><h2>${esc(parts.map(cap).join(' + '))}</h2><button class="icon-btn" data-action="close-modal" aria-label="Zavrieť">${ICON.close}</button></div>
-      ${charts}
-      <table class="ptable"><thead><tr><th>Kedy</th><th>Série</th><th>Váha</th><th>RPE</th><th>Poznámka</th></tr></thead><tbody>${rows}</tbody></table>
-    </div></div>`;
+  // Úprava budúcej, ešte neodcvičenej bunky – uloží sa hneď (operácia „plan“).
+  async function saveCell(c, weekN, dayN, col, fields) {
+    const d = dataOf(c.id);
+    const w = d.weeks.find((x) => x.n === weekN);
+    const day = w && w.days.find((x) => x.n === dayN);
+    const e = day && day.exercises.find((x) => x.col === col);
+    if (!e) return;
+    state.busy.cell = true;
+    render();
+    try {
+      const out = await apiPost(c, { op: 'plan', week: weekN, day: dayN, col, expect: e.name, fields });
+      if (!out.ok) throw new Error(out.error);
+      Object.assign(e.planned, fields);
+      state.pop = null;
+      toast('Uložené do tabuľky ✓');
+    } catch (err) {
+      toast('Neuložené: ' + err.message);
+    } finally {
+      state.busy.cell = false;
+      render();
+    }
   }
 
-  function chartSvg(pts, pi) {
-    const W = 340, H = 170, L = 34, R = 14, T = 22, B = 24;
+  // ---------------------------------------------------------------------------
+  // Render
+  // ---------------------------------------------------------------------------
+  const app = document.getElementById('app');
+  const layer = document.getElementById('layer');
+  const ICON = {
+    refresh: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg>',
+    back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>',
+    close: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+    logout: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4h4v16h-4M10 17l5-5-5-5M15 12H3"/></svg>',
+  };
+
+  function render() {
+    // zachovaj fokus, kurzor a posun mriežky aj stránky
+    const act = document.activeElement;
+    const focusId = act && act.id && (app.contains(act) || layer.contains(act)) ? act.id : null;
+    const sel = focusId && typeof act.selectionStart === 'number' ? [act.selectionStart, act.selectionEnd] : null;
+    const gw = app.querySelector('.gridwrap');
+    const gx = gw ? gw.scrollLeft : null;
+    const sx = window.scrollX, sy = window.scrollY;
+    const dw = layer.querySelector('.drawer');
+    const dsy = dw ? dw.scrollTop : 0;
+
+    let html;
+    if (!state.clients.length) html = renderNoClients();
+    else if (!state.cred.pass) html = renderLogin();
+    else if (state.view === 'client' && client()) html = renderClient(client());
+    else html = renderClients();
+    app.innerHTML = html;
+    layer.innerHTML = renderLayer();
+    renderBar();
+    document.body.classList.toggle('sheet-open', Boolean(state.drawer));
+
+    const gw2 = app.querySelector('.gridwrap');
+    if (gw2 && gx != null) gw2.scrollLeft = gx;
+    const dw2 = layer.querySelector('.drawer');
+    if (dw2) dw2.scrollTop = dsy;
+    window.scrollTo(sx, sy);
+    if (focusId) {
+      const el = document.getElementById(focusId);
+      if (el) {
+        el.focus({ preventScroll: true });
+        if (sel && el.setSelectionRange) try { el.setSelectionRange(sel[0], sel[1]); } catch (_) { /* nič */ }
+      }
+    }
+  }
+
+  function renderNoClients() {
+    return `<div class="login"><h1>Fitko · Tréner</h1><p>Zatiaľ tu nemáš žiadneho klienta. Klient ti pošle odkaz zo svojej apky Fitko (<b>Nastavenia → Skopírovať odkaz pre trénera</b>). Keď ho otvoríš, klient sa pridá sem.</p></div>`;
+  }
+
+  function renderLogin() {
+    return `<div class="login">
+      <h1>Fitko · Tréner</h1>
+      <p>Prehľad a plánovanie tréningov tvojich klientov. Všetko, čo tu zmeníš, je hneď aj v ich tabuľke.</p>
+      ${state.loginError ? `<div class="banner err"><div>${esc(state.loginError)}</div></div>` : ''}
+      <form id="login-form" class="form card" autocomplete="on">
+        <div class="field"><label for="lg-user">Meno</label><input id="lg-user" name="user" autocomplete="username" value="${esc(state.cred.user)}"></div>
+        <div class="field"><label for="lg-pass">Heslo</label><input id="lg-pass" name="pass" type="password" autocomplete="current-password"></div>
+        <button class="btn" type="submit" ${state.busy.login ? 'disabled' : ''}>${state.busy.login ? 'Prihlasujem…' : 'Prihlásiť sa'}</button>
+      </form>
+    </div>`;
+  }
+
+  // ----- Zoznam klientov -----
+  function clientCard(c) {
+    const st = state.data[c.id] || {};
+    const d = st.d;
+    const title = (d && d.title) || c.title || 'Klient';
+    const head = `<div class="ccard-top"><div class="avatar">${esc(title.trim().charAt(0).toUpperCase() || '?')}</div><div class="ccard-id"><div class="ccard-name">${esc(title)}</div><div class="ccard-sub">${esc(((d && d.sheet) || c.sheet || '').trim())}</div></div></div>`;
+    if (!d) {
+      if (st.error) {
+        return { score: 50, html: `<div class="ccard err">${head}<div class="banner err"><div>${esc(st.error)}</div></div><div class="ccard-actions"><button class="btn small ghost" data-a="retry" data-id="${c.id}">Skúsiť znova</button><button class="btn small ghost" data-a="remove" data-id="${c.id}">Odstrániť</button></div></div>` };
+      }
+      return { score: 0, html: `<div class="ccard">${head}<div class="ccard-sub">Načítavam…</div></div>` };
+    }
+    const model = buildModel(d);
+    const g = insightsOf(c, d, model);
+    const ws = weekStatus(d);
+    const wst = weightStatus(d);
+    const idle = ws && ws.last ? daysAgo(ws.last) : null;
+    const flags = [];
+    if (idle != null && idle >= 5) flags.push(['warn', `${idle} dní bez tréningu`]);
+    if (g.down.length) flags.push(['down', `↓ ${g.down.length} ${plural(g.down.length, 'cvik klesá', 'cviky klesajú', 'cvikov klesá')}`]);
+    if (g.fatigue.length) flags.push(['warn', `rastie únava (${g.fatigue.length})`]);
+    if (g.unseen.length) flags.push(['notes', `${g.unseen.length} ${plural(g.unseen.length, 'nová poznámka', 'nové poznámky', 'nových poznámok')}`]);
+    if (g.same.length) flags.push(['', `→ ${g.same.length} ${plural(g.same.length, 'stagnuje', 'stagnujú', 'stagnuje')}`]);
+    if (g.up.length) flags.push(['up', `↑ ${g.up.length} ${plural(g.up.length, 'cvik ide hore', 'cviky idú hore', 'cvikov ide hore')}`]);
+    const score = (idle >= 5 ? 40 : 0) + g.down.length * 10 + g.fatigue.length * 8 + g.unseen.length * 5 + g.same.length * 2;
+    const html = `<button class="ccard" data-a="open" data-id="${c.id}">${head}
+      <div class="ccard-stats">
+        ${ws ? `<span><b>${ws.done}/${ws.total}</b> ${plural(ws.total, 'tréning', 'tréningy', 'tréningov')} v T${ws.w.n}</span>` : ''}
+        ${ws && ws.last ? `<span>naposledy <b>${esc(agoText(ws.last))}</b></span>` : ''}
+        ${wst ? `<span><b>${esc(fmtKg(wst.last.kg))}</b> kg ráno</span>` : ''}
+      </div>
+      <div class="flags">${flags.map(([cls, t]) => `<span class="flag ${cls}">${esc(t)}</span>`).join('') || '<span class="flag">zatiaľ málo dát</span>'}</div>
+    </button>`;
+    return { score, html };
+  }
+
+  function renderClients() {
+    const cards = state.clients.map(clientCard).sort((a, b) => b.score - a.score).map((x) => x.html).join('');
+    const now = new Date();
+    return `
+      <div class="topbar">
+        <h1>Moji klienti<span class="sub">${DAY_NAMES[now.getDay()]} ${now.getDate()}. ${now.getMonth() + 1}. · kto potrebuje pozornosť, je prvý</span></h1>
+        <button class="icon-btn" data-a="reload-all" aria-label="Obnoviť">${ICON.refresh}</button>
+        <button class="icon-btn" data-a="logout" aria-label="Odhlásiť">${ICON.logout}</button>
+      </div>
+      <div class="clients">${cards}
+        <div class="ccard add-client"><b>+ Pridať klienta</b><span>Klient ti pošle odkaz zo svojej apky Fitko (Nastavenia → Skopírovať odkaz pre trénera). Keď ho otvoríš, pribudne sem.</span></div>
+      </div>`;
+  }
+
+  // ----- Panel klienta -----
+  function sparkline(list) {
+    if (list.length < 2) return '';
+    const W = 200, H = 26, vals = list.map((x) => x.kg);
+    let mn = Math.min(...vals), mx = Math.max(...vals);
+    if (mx - mn < 1) { mn -= 0.5; mx += 0.5; }
+    const x = (i) => 2 + (i * (W - 4)) / (vals.length - 1), y = (v) => 3 + (1 - (v - mn) / (mx - mn)) * (H - 6);
+    return `<svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true"><path d="${vals.map((v, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ')}"/><circle cx="${x(vals.length - 1)}" cy="${y(vals[vals.length - 1])}" r="2.5"/></svg>`;
+  }
+
+  function renderClient(c) {
+    const st = state.data[c.id] || {};
+    const d = st.d;
+    const model = d ? buildModel(d) : null;
+    const top = `<div class="topbar phead"><button class="icon-btn" data-a="clients" aria-label="Späť na klientov">${ICON.back}</button>
+      <h1>${esc((d && d.title) || c.title || 'Klient')}<span class="sub">${d ? `${esc(d.sheet.trim())} · ${model.cols.length} ${plural(model.cols.length, 'týždeň', 'týždne', 'týždňov')}` : ''}${st.loading ? ' · načítavam…' : ''}</span></h1>
+      <button class="icon-btn" data-a="reload" aria-label="Obnoviť">${ICON.refresh}</button></div>`;
+    if (!d) return top + (st.error ? `<div class="banner err"><div>${esc(st.error)}</div><button data-a="reload">Skúsiť znova</button></div>` : '<div class="empty"><div class="spinner"></div>Načítavam tabuľku…</div>');
+    const g = insightsOf(c, d, model);
+    const dr = getDraft(c);
+
+    // Snapshot: tréningy, ranná váha, fotky
+    const ws = weekStatus(d);
+    const wst = weightStatus(d);
+    const lastPhoto = d.photos[d.photos.length - 1];
+    const snap = `<div class="snap">
+      <div class="tile"><span class="tile-k">Tento týždeň${ws ? ` (T${ws.w.n})` : ''}</span>
+        <span class="tile-v">${ws ? `${ws.done}<small>/${ws.total} ${plural(ws.total, 'tréning', 'tréningy', 'tréningov')}</small>` : '–'}</span>
+        <span class="tile-s">${ws ? (ws.next ? `čaká Deň ${ws.next.n}${ws.next.date ? ' · ' + esc(formatDate(ws.next.date)) : ''}` : 'všetko odcvičené') + (ws.last ? ` · naposledy ${esc(agoText(ws.last))}` : '') : 'bez plánu'}</span></div>
+      <button class="tile" data-a="body"><span class="tile-k">Ranná váha</span>
+        <span class="tile-v">${wst ? `${esc(fmtKg(wst.last.kg))}<small> kg · ${esc(formatDate(wst.last.date, false))}</small>` : '–'}</span>
+        <span class="tile-s">${wst && wst.diff != null ? `<b>${wst.diff > 0 ? '+' : wst.diff < 0 ? '−' : '±'}${esc(fmtKg(Math.abs(Math.round(wst.diff * 10) / 10)))} kg</b> za 7 dní` : wst ? 'málo vážení' : 'klient zatiaľ nezapisuje'}</span>
+        ${wst ? sparkline(wst.recent) : ''}</button>
+      <button class="tile" data-a="body"><span class="tile-k">Fotky progresu</span>
+        <span class="tile-v">${lastPhoto ? `${esc(formatDate(lastPhoto.date, false))}<small> · ${lastPhoto.count} ${plural(lastPhoto.count, 'fotka', 'fotky', 'fotiek')}</small>` : '–'}</span>
+        <span class="tile-s">${lastPhoto ? `spolu ${d.photos.length}× · otvoriť` : 'zatiaľ žiadne'}</span></button>
+    </div>`;
+
+    const chip = (k, cls, label) => (g[k].length ? `<button class="ins ${cls} ${state.focus === k ? 'on' : ''}" data-a="focus" data-k="${k}"><b>${k === 'notes' ? g.unseen.length : g[k].length}</b> ${label}</button>` : '');
+    const ins = `<div class="insights"><span class="lbl">Na prvý pohľad</span>
+      ${chip('up', 'up', plural(g.up.length, 'cvik ide hore', 'cviky idú hore', 'cvikov ide hore'))}
+      ${chip('same', 'same', plural(g.same.length, 'stagnuje', 'stagnujú', 'stagnuje'))}
+      ${chip('down', 'down', plural(g.down.length, 'klesá', 'klesajú', 'klesá'))}
+      ${chip('fatigue', 'warn', 'rastie únava (RPE pri rovnakej váhe)')}
+      ${chip('notes', 'note', plural(g.unseen.length, 'nová poznámka klienta', 'nové poznámky klienta', 'nových poznámok klienta'))}
+      ${!g.up.length && !g.same.length && !g.down.length ? '<span class="muted">Trendy sa ukážu po 2 odcvičených týždňoch.</span>' : ''}
+    </div>`;
+
+    const lp = lastPlannedIdx(d);
+    const nextN = lp >= 0 ? expectedTarget(d, lp) : null;
+    const tb = `<div class="toolbar"><span class="legend">V bunke: <b>váha</b> · série × opakovania · RPE · <b>objem cviku</b> (série × opak. × kg) a zmena oproti minulému týždňu. Svetlé = plán – klikni a uprav.</span>
+      ${!dr && lp >= 0 ? `<button class="btn add-week" data-a="add-week">+ Pridať týždeň ${nextN}</button>` : ''}</div>`;
+
+    return top + snap + ins + (dr ? draftBanners(d, dr) : '') + tb + (model.rows.length ? `<div class="gridwrap">${renderGrid(c, d, model, g, dr)}</div>` : '<div class="empty">V tabuľke zatiaľ nie je žiadny plán.</div>');
+  }
+
+  function draftBanners(d, dr) {
+    let out = '';
+    if (!d.settings) out += '<div class="banner warn"><div><b>Na odoslanie treba aktualizovať Apps Script klienta</b> (návod v README). Týždeň si môžeš pripraviť aj teraz – ostane uložený v prehliadači.</div></div>';
+    if (dr.stale) out += '<div class="banner warn"><div><b>Klient medzitým zapísal nové výsledky.</b> Návrh sa prepočítal – skontroluj ho a odošli znova.</div></div>';
+    if (dr.failed && dr.failed.length) {
+      const src = d.weeks.find((w) => w.n === dr.from);
+      const nameOf = (key) => {
+        if (key.startsWith('x:')) { const x = (dr.extra || []).find((q) => 'x:' + q.id === key); return 'nový cvik ' + nice(x ? x.fields.name : ''); }
+        const [dayN, col] = key.split('|').map(Number);
+        const day = src.days.find((x) => x.n === dayN);
+        const e = day && day.exercises.find((x) => x.col === col);
+        return `Deň ${dayN} · ${nice(e ? e.name : '')}`;
+      };
+      out += `<div class="banner err"><div><b>Týždeň ${dr.target} je v tabuľke, ale tieto cviky sa nezapísali:</b><ul class="failed">${dr.failed.map((f) => `<li>${esc(nameOf(f.key))} – ${esc(f.error || 'chyba')}</li>`).join('')}</ul></div></div>`;
+    }
+    return out;
+  }
+
+  function cellHtml(r, col, prevCol) {
+    const cell = r.cells[col.w.n];
+    if (!cell) return '<td class="cell empty"></td>';
+    const e = cell.e;
+    let notes = '';
+    if (e.done.note) notes += `<button class="notebtn client" data-a="note" data-r="${esc(r.key)}" data-w="${col.w.n}" aria-label="Poznámka klienta">!</button>`;
+    if (e.planned.note) notes += `<button class="notebtn coach" data-a="note" data-r="${esc(r.key)}" data-w="${col.w.n}" aria-label="Poznámka trénera">T</button>`;
+    if (!hasAny(e.done)) {
+      return `<td class="cell plan">${notes}<button class="cellbtn" data-a="cell" data-r="${esc(r.key)}" data-w="${col.w.n}" aria-label="Upraviť plán">
+        <span class="w">${esc(prettyNum(e.planned.weight) || '–')}${isNumW(e.planned.weight) ? ' kg' : ''}</span>
+        <span class="s">plán ${esc(prettySets(e.planned.sets))}${e.planned.rpe ? ' · RPE ' + esc(prettyNum(e.planned.rpe)) : ''}</span></button></td>`;
+    }
+    const v = C.totalKg(C.volume(e.name, e.planned, e.done));
+    const pc = prevCol && r.cells[prevCol.w.n];
+    const pv = pc && hasAny(pc.e.done) ? C.totalKg(C.volume(pc.e.name, pc.e.planned, pc.e.done)) : 0;
+    const cls = pv && v ? (v > pv * 1.005 ? 'up' : v < pv * 0.995 ? 'down' : '') : '';
+    const vl = v ? `<span class="v">objem <b>${esc(C.formatVolume(v))}</b>${pv ? ` <span class="p ${cls}">${esc(C.formatPct(v / pv - 1))}</span>` : ''}</span>` : '';
+    return `<td class="cell ${cls}">${notes}<span class="w">${esc(prettyNum(e.done.weight) || '–')}${isNumW(e.done.weight) ? ' kg' : ''}</span>
+      <span class="s">${esc(e.done.sets === 'Ok' ? 'Ok' : prettySets(e.done.sets))}${e.done.rpe ? ' · RPE ' + esc(prettyNum(e.done.rpe)) : ''}</span>${vl}</td>`;
+  }
+
+  function shortWhy(r, pct) {
+    const s = r.s;
+    const target = /cieľ (\d+×\d+) opak/.exec(s.reason);
+    if (s.review) return 'skontroluj – krok je veľký';
+    if (s.rule === 'R0') return 'nedá sa vyhodnotiť';
+    if (s.rule === 'R1') return 'bez zápisu – ponechané';
+    if (s.rule === 'R2') return 'váha podľa seba';
+    if (s.rule === 'R3') return /2× po sebe/.test(s.reason) ? '2× nezvládnuté → ľahšie' : 'nezvládnuté – ponechané';
+    if (s.rule === 'R4') return 'RPE nad plánom – ponechané';
+    if (target) return `cieľ ${target[1]} opak.`;
+    if (s.rule === 'R5') return `ľahké → +${fmtKg(pct * 2)} % objemu`;
+    if (s.rule === 'R6') return `splnené → +${fmtKg(pct)} % objemu`;
+    return '';
+  }
+
+  function draftCell(d, dr, dRow) {
+    const key = dRow.key;
+    const id = `dr-${key.replace('|', '-')}`;
+    if (dRow.skip) {
+      return `<td class="draft skipped"><div class="dcell"><span class="muted">vynechané</span><button class="link" data-a="unskip" data-k="${key}">vrátiť</button></div></td>`;
+    }
+    const f = dRow.fields, base = dRow.e.planned;
+    const wNew = C.parseWeight(String(f.weight).split(/\s+a\s+/)[0]), wOld = C.parseWeight(String(base.weight).split(/\s+a\s+/)[0]);
+    const dw = wNew && wOld && wNew.lo && wOld.lo ? wNew.lo - wOld.lo : 0;
+    const lastDone = dRow.src ? C.totalKg(C.volume(dRow.e.name, dRow.src.planned, dRow.src.done)) : 0;
+    const nv = C.totalKg(C.volume(dRow.e.name, f, f));
+    const volLine = nv ? `<span class="v">objem <b>${esc(C.formatVolume(nv))}</b>${lastDone ? ` <span class="p ${nv > lastDone * 1.005 ? 'up' : nv < lastDone * 0.995 ? 'down' : ''}">${esc(C.formatPct(nv / lastDone - 1))}</span> vs. T${dRow.src.week}` : ''}</span>` : '';
+    const why = dRow.st.edited ? '<span class="why">upravené tebou</span>'
+      : dr.mode === 'copy' ? `<span class="why">kópia T${dr.from}</span>`
+      : `<span class="why ${dRow.s.review ? 'rev' : ''}" title="${esc(dRow.s.reason)}">${dw ? `<span class="d ${dw > 0 ? 'up' : 'down'}">${dw > 0 ? '+' : '−'}${esc(fmtKg(Math.abs(dw)))} kg</span> ` : ''}${esc(shortWhy(dRow, settingsOf(d).pct))}</span>`;
+    const inp = (k, cls, label, ph) => `<input id="${id}-${k}" class="${cls} ${String(f[k] || '') !== String(base[k] || '') ? 'chg' : ''}" data-dk="${key}" data-f="${k}" value="${esc(f[k] || '')}" placeholder="${esc(ph)}" aria-label="${esc(label + ' – ' + nice(dRow.e.name))}" autocomplete="off">`;
+    return `<td class="draft"><div class="dcell">
+      <div class="dline">${inp('weight', 'wt', 'Váha', 'kg')}<span class="unit">kg</span></div>
+      <div class="dline">${inp('sets', 'sets', 'Série', '3x10')}${inp('rpe', 'rpe', 'RPE', 'RPE')}</div>
+      ${inp('note', 'note', 'Poznámka pre klienta', 'poznámka pre klienta')}
+      ${volLine}${why}
+      <span class="dacts">${dRow.st.edited ? `<button class="link" data-a="unedit" data-k="${key}">späť na ${dr.mode === 'copy' ? 'kópiu' : 'návrh'}</button>` : ''}<button class="link muted" data-a="skip" data-k="${key}">vynechať</button></span>
+    </div></td>`;
+  }
+
+  function renderGrid(c, d, model, g, dr) {
+    const cols = model.cols;
+    const curIdx = currentWeekIdx(d);
+    const drows = dr ? draftRows(c, d, dr) : [];
+    const dByRow = new Map(drows.map((x) => [x.rowKey, x]));
+    const target = dr ? dr.target || expectedTarget(d, d.weeks.findIndex((w) => w.n === dr.from)) : null;
+    const focusSet = state.focus ? g[state.focus] : null;
+    const srcWeek = dr ? d.weeks.find((w) => w.n === dr.from) : null;
+    const srcDates = srcWeek ? srcWeek.days.map((x) => x.date).filter(Boolean) : [];
+    const draftRange = srcDates.length ? `${formatDate(isoPlus(srcDates[0], 7), false)} – ${formatDate(isoPlus(srcDates[srcDates.length - 1], 7), false)}` : '';
+    const st = settingsOf(d);
+    const head = `<thead><tr><th class="exc">Cvik</th>${cols.map(({ w, wi }) => `<th class="${wi === curIdx ? 'cur' : ''}"><b>T${w.n}</b>${esc(weekRange(w))}${wi === curIdx ? ' · teraz' : wi > curIdx ? ' · plán' : ''}</th>`).join('')}
+      ${dr ? `<th class="draft"><div class="draft-head"><b>T${target} · nový</b><span>${esc(draftRange)}</span>
+        <div class="seg" role="group" aria-label="Predvyplnenie"><button class="${dr.mode === 'suggest' ? 'on' : ''}" data-a="mode" data-m="suggest">Návrh</button><button class="${dr.mode === 'copy' ? 'on' : ''}" data-a="mode" data-m="copy">Kópia T${dr.from}</button></div>
+        ${dr.mode === 'suggest' ? `<label class="pct">cieľ objemu <select id="dr-pct" data-pct="1">${PCT_OPTIONS.map((v) => `<option value="${v}" ${Number(st.pct) === v ? 'selected' : ''}>+${String(v).replace('.', ',')} %</option>`).join('')}</select></label>` : ''}
+      </div></th>` : ''}</tr></thead>`;
+    const nCols = cols.length + 1 + (dr ? 1 : 0);
+    const body = model.days.map((dayN) => {
+      const rows = model.rows.filter((r) => r.day === dayN);
+      const latest = rows.map((r) => r.cells[cols[cols.length - 1].w.n]).find(Boolean);
+      const dayDate = latest && latest.day.date;
+      let out = `<tr class="dayrow"><th class="exc">Deň ${dayN}${dayDate ? ` · ${DAY_NAMES[dateOf(dayDate).getDay()]}` : ''}</th><td colspan="${nCols - 1}"></td></tr>`;
+      out += rows.map((r) => {
+        const cls = focusSet ? (focusSet.includes(r.key) ? 'hl' : 'dim') : '';
+        const latestCell = cols.slice().reverse().map(({ w }) => r.cells[w.n]).find(Boolean);
+        const t = r.trend;
+        const trendHtml = t.kind === 'none' ? '' : `<span class="trend ${t.kind}" title="${esc(t.why)}">${t.kind === 'up' ? '↑ ide hore' : t.kind === 'down' ? '↓ klesá' : '→ stagnuje'}</span>`;
+        const dRow = dByRow.get(r.key);
+        return `<tr class="${cls}"><th class="exc"><button class="exname" data-a="ex" data-r="${esc(r.key)}">${esc(nice(r.name))}</button>
+          <div class="exmeta">${trendHtml}${t.fatigue ? '<span class="trend down" title="RPE rastie pri rovnakej váhe">únava</span>' : ''}<span>${esc(prettySets(latestCell.e.planned.sets))}${latestCell.e.planned.rpe ? ' · RPE ' + esc(prettyNum(latestCell.e.planned.rpe)) : ''}</span></div></th>
+          ${cols.map((col, i) => cellHtml(r, col, cols[i - 1])).join('')}
+          ${dr ? (dRow ? draftCell(d, dr, dRow) : '<td class="draft none"></td>') : ''}</tr>`;
+      }).join('');
+      if (dr) {
+        out += (dr.extra || []).filter((x) => x.day === dayN).map((x) => {
+          const id = `x-${x.id}`;
+          const inp = (k, cls, ph) => `<input id="${id}-${k}" class="${cls} chg" data-x="${x.id}" data-f="${k}" value="${esc(x.fields[k] || '')}" placeholder="${esc(ph)}" autocomplete="off">`;
+          return `<tr class="newrow"><th class="exc">${inp('name', 'nameinput', 'Názov nového cviku')}<div class="exmeta"><span class="trend up">nový cvik</span><button class="link muted" data-a="drop-extra" data-x="${x.id}">odstrániť</button></div></th>
+            ${cols.map(() => '<td class="cell empty"></td>').join('')}
+            <td class="draft"><div class="dcell"><div class="dline">${inp('weight', 'wt', 'kg')}<span class="unit">kg</span></div><div class="dline">${inp('sets', 'sets', '3x10')}${inp('rpe', 'rpe', 'RPE')}</div>${inp('note', 'note', 'poznámka pre klienta')}<span class="why">nový cvik</span></div></td></tr>`;
+        }).join('');
+        const slot = freeSlot(d, dr, dayN);
+        const canAdd = slot && d.version >= 3;
+        out += `<tr class="addrow"><th class="exc">${canAdd ? `<button class="link" data-a="add-extra" data-day="${dayN}">+ cvik do Dňa ${dayN}</button>` : `<span class="muted small">${slot ? 'Nový cvik: treba aktualizovať Apps Script' : 'Deň je plný'}</span>`}</th><td colspan="${nCols - 1}"></td></tr>`;
+      }
+      return out;
+    }).join('');
+    return `<table class="g">${head}<tbody>${body}</tbody></table>`;
+  }
+
+  function barText(c, d, dr) {
+    const n = draftChanges(draftRows(c, d, dr), dr);
+    return `${n} ${plural(n, 'zmena', 'zmeny', 'zmien')} oproti T${dr.from} · uložené v tomto prehliadači`;
+  }
+  function renderBar() {
+    let bar = document.getElementById('bar');
+    const c = client();
+    const d = c && dataOf(c.id);
+    const dr = d && state.view === 'client' && state.cred.pass ? getDraft(c) : null;
+    if (!dr) { if (bar) bar.remove(); document.body.classList.remove('has-bar'); return; }
+    if (!bar) { bar = document.createElement('div'); bar.id = 'bar'; bar.className = 'bar'; document.body.appendChild(bar); }
+    document.body.classList.add('has-bar');
+    const target = dr.target || expectedTarget(d, d.weeks.findIndex((w) => w.n === dr.from));
+    const failed = dr.failed && dr.failed.length;
+    const busy = state.busy.send;
+    bar.innerHTML = `<div class="bar-in"><div class="info"><b>${failed ? `Týždeň ${target}: ${dr.failed.length} ${plural(dr.failed.length, 'cvik čaká', 'cviky čakajú', 'cvikov čaká')} na odoslanie` : `Týždeň ${target} je rozpracovaný`}</b><span id="bar-sub">${esc(barText(c, d, dr))}</span></div>
+      <button class="btn ghost" data-a="discard" ${busy ? 'disabled' : ''}>Zahodiť</button>
+      <button class="btn" data-a="${failed ? 'retry-send' : 'send'}" ${busy || !d.settings ? 'disabled' : ''}>${busy ? 'Odosielam…' : failed ? 'Odoslať chýbajúce' : 'Odoslať klientovi'}</button></div>`;
+  }
+
+  // ----- Vrstva: poznámka, úprava bunky, detail cviku, telo -----
+  const rowByKey = (d, key) => buildModel(d).rows.find((r) => r.key === key);
+
+  function renderLayer() {
+    const c = client();
+    const d = c && dataOf(c.id);
+    if (!d || state.view !== 'client' || !state.cred.pass) return '';
+    let out = '';
+    if (state.pop) {
+      const p = state.pop;
+      const r = rowByKey(d, p.r);
+      const cell = r && r.cells[p.w];
+      if (cell) {
+        const style = `top:${Math.round(p.top)}px;left:${Math.round(p.left)}px`;
+        if (p.kind === 'note') {
+          out += `<div class="pop" style="${style}" role="dialog"><b>${esc(nice(r.name))} · T${p.w}</b>
+            ${cell.e.done.note ? `<div><span class="who">Klient</span>„${esc(cell.e.done.note)}“</div>` : ''}
+            ${cell.e.planned.note ? `<div><span class="who">Tréner</span>${esc(cell.e.planned.note)}</div>` : ''}</div>`;
+        } else {
+          const f = cell.e.planned;
+          const field = (k, label, ph) => `<label class="pf pf-${k}"><span>${label}</span><input id="pc-${k}" value="${esc(f[k] || '')}" placeholder="${esc(ph)}" autocomplete="off"></label>`;
+          out += `<div class="pop edit" style="${style}" role="dialog"><b>${esc(nice(r.name))} · plán T${p.w}, Deň ${cell.day.n}</b>
+            <div class="pgrid">${field('weight', 'Váha', 'kg')}${field('sets', 'Série', '3x10')}${field('rpe', 'RPE', '8')}</div>${field('note', 'Poznámka pre klienta', '')}
+            <div class="pacts"><button class="btn small ghost" data-a="pop-close">Zrušiť</button><button class="btn small" data-a="cell-save" ${state.busy.cell ? 'disabled' : ''}>${state.busy.cell ? 'Ukladám…' : 'Uložiť do tabuľky'}</button></div></div>`;
+        }
+      }
+    }
+    if (state.drawer && state.drawer.kind === 'ex') out += renderExDrawer(c, d, state.drawer.key);
+    if (state.drawer && state.drawer.kind === 'body') out += renderBodyDrawer(d);
+    return out;
+  }
+
+  function chartSvg(pts, opts) {
+    const W = 380, H = 170, L = 46, R = 12, T = 14, B = 26;
+    if (!pts.length) return '<p class="hint">Zatiaľ žiadne dáta.</p>';
     const vals = pts.map((p) => p.value);
-    let min = Math.min(...vals), max = Math.max(...vals);
-    if (min === max) { min -= 5; max += 5; }
-    const padV = (max - min) * 0.15; min = Math.max(0, min - padV); max += padV;
-    const raw = (max - min) / 3, p10 = Math.pow(10, Math.floor(Math.log10(raw || 1))), n = raw / p10;
-    const step = (n <= 1 ? 1 : n <= 2 ? 2 : n <= 2.5 ? 2.5 : n <= 5 ? 5 : 10) * p10;
-    const lo = Math.floor(min / step) * step, hi = Math.ceil(max / step) * step;
+    let mn = Math.min(...vals), mx = Math.max(...vals);
+    if (mn === mx) { mn -= 1; mx += 1; }
+    const padV = (mx - mn) * 0.15; mn -= padV; mx += padV;
     const x = (i) => (pts.length === 1 ? (L + W - R) / 2 : L + (i * (W - L - R)) / (pts.length - 1));
-    const y = (v) => T + (1 - (v - lo) / (hi - lo)) * (H - T - B);
-    let grid = '';
-    for (let v = lo; v <= hi + 1e-9; v += step) grid += `<line class="grid" x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}"/><text class="axis" x="${L - 6}" y="${y(v) + 4}" text-anchor="end">${fmtKg(v)}</text>`;
-    const sel = state.modal && state.modal.sel && state.modal.sel.pi === pi ? state.modal.sel.i : pts.length - 1;
+    const y = (v) => T + (1 - (v - mn) / (mx - mn)) * (H - T - B);
+    const fmt = opts && opts.vol ? (v) => C.formatVolume(Math.round(v)) : (v) => fmtKg(Math.round(v * 10) / 10);
+    const grid = [0, 0.5, 1].map((f) => { const v = mn + (mx - mn) * f; return `<line class="grid" x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}"/><text class="axis" x="${L - 6}" y="${y(v) + 3}" text-anchor="end">${esc(fmt(v))}</text>`; }).join('');
+    const seps = pts.map((p, i) => (i && p.block !== pts[i - 1].block ? `<line class="sep" x1="${(x(i) + x(i - 1)) / 2}" x2="${(x(i) + x(i - 1)) / 2}" y1="${T}" y2="${H - B}"/>` : '')).join('');
     const path = pts.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p.value).toFixed(1)}`).join(' ');
-    const dots = pts.map((p, i) => `<g class="pt ${i === sel ? 'sel' : ''}" data-action="chart-pt" data-pi="${pi}" data-i="${i}"><circle class="hit" cx="${x(i)}" cy="${y(p.value)}" r="14"/><circle class="dot" cx="${x(i)}" cy="${y(p.value)}" r="${i === sel ? 6 : 4.5}"/></g>`).join('');
-    const sp = pts[sel];
-    const lx = Math.min(Math.max(x(sel), L + 50), W - R - 50);
-    const lbl = (p) => (p.date ? formatDate(p.date, false) : 'T' + p.week);
-    return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img">${grid}<path class="line" d="${path}"/>${dots}
-      <text class="tip" x="${lx}" y="${Math.max(14, y(sp.value) - 12)}" text-anchor="middle">${fmtKg(sp.value)} kg · ${esc(lbl(sp))}</text>
-      <text class="axis" x="${x(0)}" y="${H - 6}" text-anchor="${pts.length === 1 ? 'middle' : 'start'}">${esc(lbl(pts[0]))}</text>
-      ${pts.length > 1 ? `<text class="axis" x="${x(pts.length - 1)}" y="${H - 6}" text-anchor="end">${esc(lbl(pts[pts.length - 1]))}</text>` : ''}</svg>`;
+    const dots = pts.map((p, i) => `<circle class="dot ${p.cur ? '' : 'old'}" cx="${x(i)}" cy="${y(p.value)}" r="3.5"><title>${esc(p.label)}: ${esc(fmt(p.value))}</title></circle>`).join('');
+    const lbl = [0, pts.length - 1].filter((v, i, a) => a.indexOf(v) === i).map((i) => `<text class="axis" x="${x(i)}" y="${H - 8}" text-anchor="${pts.length === 1 ? 'middle' : i === 0 ? 'start' : 'end'}">${esc(pts[i].label)}</text>`).join('');
+    return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img">${grid}${seps}<path class="line" d="${path}"/>${dots}${lbl}</svg>`;
+  }
+
+  function renderExDrawer(c, d, key) {
+    const r = rowByKey(d, key);
+    if (!r) return '';
+    const k = nameKey(r.name);
+    const hist = state.history[c.id];
+    const pts = [];
+    const add = (weeks, block, cur) => weeks.forEach((w) => w.days.forEach((day) => day.exercises.forEach((e) => {
+      if (nameKey(e.name) !== k || !hasAny(e.done)) return;
+      const wp = C.parseWeight(String(e.done.weight).split(/\s+a\s+/)[0]);
+      pts.push({ date: day.date || '', block, cur, week: w.n, e, w: wp && wp.lo ? wp.lo : null, v: C.totalKg(C.volume(e.name, e.planned, e.done)), label: day.date ? formatDate(day.date, false) : 'T' + w.n });
+    })));
+    if (hist) hist.sheets.forEach((s) => add(s.weeks, s.name, false));
+    add(d.weeks, d.sheet, true);
+    pts.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+    const wPts = pts.filter((p) => p.w).map((p) => ({ value: p.w, label: p.label, block: p.block, cur: p.cur }));
+    const vPts = pts.filter((p) => p.v).map((p) => ({ value: p.v, label: p.label, block: p.block, cur: p.cur }));
+    const notes = [];
+    for (const p of pts.slice().reverse()) if (p.e.done.note) notes.push([`Klient · ${p.cur ? 'T' + p.week : p.block.trim() + ' · T' + p.week}${p.date ? ' · ' + p.label : ''}`, `„${p.e.done.note}“`]);
+    for (const col of buildModel(d).cols.slice().reverse()) { const cell = r.cells[col.w.n]; if (cell && cell.e.planned.note) notes.push([`Tréner · T${col.w.n}`, cell.e.planned.note]); }
+    const t = r.trend;
+    const step = stepFor(d, r.name);
+    return `<div class="drawer-bg" data-a="close-drawer"></div><aside class="drawer" role="dialog" aria-label="Detail cviku">
+      <div class="drawer-head"><h2>${esc(nice(r.name))}</h2><button class="icon-btn" data-a="close-drawer" aria-label="Zavrieť">${ICON.close}</button></div>
+      <div class="flags">${t.kind !== 'none' ? `<span class="flag ${t.kind}">${t.kind === 'up' ? '↑ ide hore' : t.kind === 'down' ? '↓ klesá' : '→ stagnuje'} · ${esc(t.why)}</span>` : ''}${t.fatigue ? '<span class="flag warn">rastie únava</span>' : ''}</div>
+      <section><h3>Váha (kg)</h3>${chartSvg(wPts)}</section>
+      <section><h3>Objem cviku (kg)</h3>${chartSvg(vPts, { vol: true })}</section>
+      <p class="hint">${hist && hist.loading ? 'Načítavam staršie bloky…' : hist && hist.sheets.length ? `Vrátane starších blokov (${esc(hist.sheets.map((s) => s.name.trim()).join(', '))}) – svetlé body, zvislá čiara = nový blok.` : 'Aktuálny blok.'}</p>
+      <label class="stepset">Krok váhy pre návrhy <select id="step-select" data-step="${esc(k)}">${STEP_OPTIONS.map((v) => `<option value="${v}" ${v === step ? 'selected' : ''}>${fmtKg(v)} kg</option>`).join('')}${STEP_OPTIONS.includes(step) ? '' : `<option selected value="${step}">${fmtKg(step)} kg</option>`}</select></label>
+      <section><h3>Poznámky</h3><div class="notes">${notes.length ? notes.map(([who, txt]) => `<div class="note"><span class="who">${esc(who)}</span>${esc(txt)}</div>`).join('') : '<div class="note">Zatiaľ žiadne.</div>'}</div></section>
+    </aside>`;
+  }
+
+  function renderBodyDrawer(d) {
+    const wst = weightStatus(d);
+    const pts = d.weights.slice(-90).map((w) => ({ value: w.kg, label: formatDate(w.date, false), block: '', cur: true }));
+    const photos = d.photos.slice().reverse().map((p) => `<a class="note link-row" href="${esc(p.url)}" target="_blank" rel="noopener"><span class="who">${esc(formatDate(p.date))}</span>${p.count} ${plural(p.count, 'fotka', 'fotky', 'fotiek')} · otvoriť na Drive ›</a>`).join('');
+    const avg = (v) => (v != null ? esc(fmtKg(Math.round(v * 10) / 10)) : '–');
+    return `<div class="drawer-bg" data-a="close-drawer"></div><aside class="drawer" role="dialog" aria-label="Váha a fotky">
+      <div class="drawer-head"><h2>Ranná váha a fotky</h2><button class="icon-btn" data-a="close-drawer" aria-label="Zavrieť">${ICON.close}</button></div>
+      <div class="tiles"><div class="tile"><div class="tile-v">${wst ? esc(fmtKg(wst.last.kg)) : '–'}</div><div class="tile-k">posledná</div></div>
+        <div class="tile"><div class="tile-v">${wst ? avg(wst.avg7) : '–'}</div><div class="tile-k">priemer 7 dní</div></div>
+        <div class="tile"><div class="tile-v">${wst ? avg(wst.avg30) : '–'}</div><div class="tile-k">priemer 30 dní</div></div></div>
+      <section><h3>Ranná váha (kg)</h3>${chartSvg(pts)}</section>
+      <section><h3>Fotky progresu</h3><div class="notes">${photos || '<div class="note">Zatiaľ žiadne fotky.</div>'}</div></section>
+    </aside>`;
   }
 
   // ---------------------------------------------------------------------------
   // Udalosti
   // ---------------------------------------------------------------------------
-  function markRow(el) {
-    const btn = document.querySelector(`[data-action="save-row"][data-row="${el.dataset.row}"]`);
-    if (btn) btn.disabled = false;
-    const row = document.getElementById('row-' + el.dataset.row);
-    if (row) row.classList.add('dirty');
+  function openClient(id) {
+    state.view = 'client';
+    state.clientId = id;
+    state.focus = null;
+    state.drawer = null;
+    state.pop = null;
+    save(KEY.view, id);
+    render();
+    window.scrollTo(0, 0);
+    const c = client();
+    if (c) loadClient(c, true);
   }
-
-  app.addEventListener('input', (e) => {
-    if (e.target.dataset.field) { e.target.dataset.dirty = '1'; markRow(e.target); }
-    if (e.target.dataset.sg && state.draft) {
-      // Úprava návrhu: ulož hneď (prežije obnovenie stránky), prekresli až po dopísaní.
-      const key = e.target.dataset.key;
-      const r = suggestionRows().find((x) => x.key === key);
-      if (!r) return;
-      const fields = { ...finalOf(r).f, [e.target.dataset.sg]: e.target.value };
-      state.draft.rows[key] = { mode: 'edit', fields };
-      saveDraft();
-    }
-  });
-  app.addEventListener('change', (e) => {
-    if (e.target.dataset.sg) render();
-    if (e.target.dataset.sgStep != null) saveSetting('krok:' + e.target.dataset.sgStep, Number(e.target.value));
-  });
-  app.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && e.target.dataset.field) {
-      e.preventDefault();
-      const btn = document.querySelector(`[data-action="save-row"][data-row="${e.target.dataset.row}"]`);
-      if (btn && !btn.disabled) btn.click();
-    }
-  });
+  function leaveClient() {
+    const c = client();
+    if (c) markNotesSeen(c);
+    state.view = 'clients';
+    state.drawer = null;
+    state.pop = null;
+    save(KEY.view, null);
+    render();
+    window.scrollTo(0, 0);
+  }
+  function updateDraft(fn) {
+    const c = client();
+    const dr = getDraft(c);
+    if (!dr) return;
+    fn(dr, c);
+    putDraft(c, dr);
+  }
 
   app.addEventListener('submit', async (e) => {
     if (e.target.id !== 'login-form') return;
     e.preventDefault();
-    state.cfg.user = e.target.elements.user.value.trim();
-    state.cfg.pass = e.target.elements.pass.value;
-    state.data = null;
-    state.error = null;
+    state.cred = { user: e.target.elements.user.value.trim(), pass: e.target.elements.pass.value };
+    state.busy.login = true;
+    state.loginError = null;
     render();
-    await reload();
-    if (state.data) save(LS_KEY, state.cfg);
-    else { state.cfg.pass = ''; render(); }
+    const results = await Promise.all(state.clients.map((c) => loadClient(c, true)));
+    state.busy.login = false;
+    if (results.some((r) => r && r.d)) save(KEY.cred, state.cred);
+    else {
+      state.loginError = (results[0] && results[0].error) || 'Prihlásenie zlyhalo';
+      state.cred.pass = '';
+    }
+    render();
   });
 
-  app.addEventListener('click', (e) => {
-    const t = e.target.closest('[data-action]');
-    if (!t) return;
-    if ((t.dataset.action === 'close-modal') && t.classList.contains('sheet-backdrop') && t !== e.target) return;
-    handle(t.dataset.action, t);
+  document.addEventListener('input', (e) => {
+    const el = e.target;
+    if (el.dataset.dk) {
+      // Úprava rozpracovaného týždňa – ulož hneď, prekresli až po dopísaní (change).
+      updateDraft((dr, c) => {
+        const r = draftRows(c, dataOf(c.id), dr).find((x) => x.key === el.dataset.dk);
+        if (!r) return;
+        dr.rows[r.key] = { ...(dr.rows[r.key] || {}), edited: true, fields: { ...r.fields, [el.dataset.f]: el.value } };
+      });
+      el.classList.add('chg');
+      const c = client();
+      const sub = document.getElementById('bar-sub');
+      if (sub) sub.textContent = barText(c, dataOf(c.id), getDraft(c));
+    } else if (el.dataset.x) {
+      updateDraft((dr) => { const x = (dr.extra || []).find((q) => q.id === el.dataset.x); if (x) x.fields[el.dataset.f] = el.value; });
+    }
   });
+  document.addEventListener('change', (e) => {
+    const el = e.target;
+    const c = client();
+    if (el.dataset.dk || el.dataset.x) render();
+    else if (el.dataset.pct != null && c) saveSetting(c, 'progres_percent', Number(el.value));
+    else if (el.dataset.step != null && c) saveSetting(c, 'krok:' + el.dataset.step, Number(el.value));
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && (state.pop || state.drawer)) { state.pop = null; state.drawer = null; render(); }
+    if (e.key === 'Enter' && e.target.closest && e.target.closest('.pop.edit')) { e.preventDefault(); handle('cell-save'); }
+  });
+  document.addEventListener('click', (e) => {
+    const t = e.target.closest('[data-a]');
+    if (!t) {
+      if (state.pop && !e.target.closest('.pop')) { state.pop = null; render(); }
+      return;
+    }
+    if (t.dataset.a === 'close-drawer' && t.classList.contains('drawer-bg') && t !== e.target) return;
+    handle(t.dataset.a, t);
+  });
+
+  function popAt(t, kind) {
+    const rect = t.getBoundingClientRect();
+    const w = kind === 'cell' ? 320 : 300;
+    return { top: Math.max(8, Math.min(rect.bottom + 6, window.innerHeight - (kind === 'cell' ? 250 : 160))), left: Math.max(8, Math.min(rect.left - 40, window.innerWidth - w - 8)) };
+  }
 
   async function handle(action, t) {
+    const c = client();
     switch (action) {
-      case 'reload': reload(true); break;
-      case 'logout':
-        state.cfg.pass = ''; state.data = null; save(LS_KEY, state.cfg); render(); break;
-      case 'tab': state.tab = t.dataset.tab; render(); window.scrollTo(0, 0); break;
-      case 'week':
-        state.weekIdx = Math.max(0, Math.min(state.data.weeks.length - 1, state.weekIdx + Number(t.dataset.dir)));
-        render(); break;
-      case 'chart': state.modal = { name: t.dataset.name, sel: null }; render(); break;
-      case 'chart-pt': state.modal.sel = { pi: Number(t.dataset.pi), i: Number(t.dataset.i) }; render(); break;
-      case 'close-modal': state.modal = null; render(); break;
-      case 'add-ex': {
-        (state.newRows[t.dataset.key] = state.newRows[t.dataset.key] || []).push(Number(t.dataset.col));
+      case 'open': openClient(t.dataset.id); break;
+      case 'clients': leaveClient(); break;
+      case 'reload-all': loadAll(); break;
+      case 'reload': if (c) { state.history[c.id] = null; loadClient(c); } break;
+      case 'retry': { const cc = state.clients.find((x) => x.id === t.dataset.id); if (cc) loadClient(cc); break; }
+      case 'remove': {
+        const cc = state.clients.find((x) => x.id === t.dataset.id);
+        if (!cc || !window.confirm(`Odstrániť klienta ${cc.title || ''} zo zoznamu? Jeho tabuľka ostane nezmenená.`)) break;
+        state.clients = state.clients.filter((x) => x.id !== cc.id);
+        save(KEY.clients, state.clients);
         render();
-        const [w, d] = t.dataset.key.split('|');
-        const el = document.getElementById(`f-name-${w}-${d}-${t.dataset.col}`);
+        break;
+      }
+      case 'logout': state.cred.pass = ''; state.data = {}; save(KEY.cred, state.cred); leaveClient(); break;
+      case 'focus': state.focus = state.focus === t.dataset.k ? null : t.dataset.k; render(); break;
+      case 'note': state.pop = { kind: 'note', r: t.dataset.r, w: Number(t.dataset.w), ...popAt(t, 'note') }; render(); break;
+      case 'cell': {
+        state.pop = { kind: 'cell', r: t.dataset.r, w: Number(t.dataset.w), ...popAt(t, 'cell') };
+        render();
+        const el = document.getElementById('pc-weight');
         if (el) el.focus();
         break;
       }
-      case 'cancel-row': {
-        const row = document.getElementById('row-' + t.dataset.row);
-        const key = `${row.dataset.week}|${row.dataset.day}`;
-        state.newRows[key] = (state.newRows[key] || []).filter((c) => c !== Number(row.dataset.col));
-        render(); break;
-      }
-      case 'save-row': await saveRow(t.dataset.row, false); break;
-      case 'copy-day': await copyDay(Number(t.dataset.src), Number(t.dataset.dst), Number(t.dataset.day)); break;
-      case 'remove-row':
-        if (confirm('Odstrániť tento cvik z plánu?')) await saveRow(t.dataset.row, true);
-        break;
-      case 'metric': state.metric = t.dataset.m; render(); break;
-      case 'sg-open': {
-        const from = Number(t.dataset.from);
-        const dr = draftFor();
-        state.draft = dr && dr.from === from ? { ...dr, open: true } : { sheet: state.data.sheet, from, open: true, rows: {} };
-        saveDraft(); render(); window.scrollTo(0, 0); break;
-      }
-      case 'sg-close': state.draft.open = false; saveDraft(); render(); window.scrollTo(0, 0); break;
-      case 'sg-discard':
-        if (confirm('Zahodiť návrh a všetky úpravy?')) { state.draft = null; saveDraft(); render(); window.scrollTo(0, 0); }
-        break;
-      case 'sg-pct': await saveSetting('progres_percent', Number(t.dataset.v)); break;
-      case 'sg-alt': setDecision(t.dataset.key, { mode: 'alt', alt: t.dataset.label }); break;
-      case 'sg-keep': setDecision(t.dataset.key, { mode: 'keep' }); break;
-      case 'sg-auto': setDecision(t.dataset.key, { mode: 'auto' }); break;
-      case 'sg-all': {
-        const mode = t.dataset.mode;
-        for (const r of suggestionRows()) {
-          const cur = decision(r.key);
-          if (cur.mode !== 'edit') state.draft.rows[r.key] = { mode };
-        }
-        saveDraft(); render(); break;
-      }
-      case 'sg-apply': await applySuggestion(false); break;
-      case 'sg-retry': await applySuggestion(true); break;
-      case 'copy-week': {
-        state.busy.copy = true; render();
-        try {
-          const out = await apiPost({ op: 'copyWeek', from: Number(t.dataset.from) });
-          if (!out.ok) throw new Error(out.error);
-          await reload(true);
-          const idx = state.data.weeks.findIndex((w) => w.n === out.week);
-          if (idx >= 0) state.weekIdx = idx;
-          toast(`Týždeň ${out.week} naplánovaný – uprav, čo treba`);
-        } catch (err) { toast('Nepodarilo sa: ' + err.message); }
-        state.busy.copy = false; render();
+      case 'pop-close': state.pop = null; render(); break;
+      case 'cell-save': {
+        const p = state.pop;
+        const d = c && dataOf(c.id);
+        const r = p && d && rowByKey(d, p.r);
+        const cell = r && r.cells[p.w];
+        if (!cell) break;
+        const val = (k) => ((document.getElementById('pc-' + k) || {}).value || '').trim();
+        await saveCell(c, p.w, cell.day.n, cell.e.col, { sets: val('sets'), weight: val('weight'), rpe: val('rpe'), note: val('note') });
         break;
       }
-    }
-  }
-
-  // Skopíruje cviky dňa (názov + PLANNED) z týždňa src do toho istého dňa v týždni dst.
-  // Používa existujúcu operáciu „plan“ – každý cvik jeden zápis, do prázdneho stĺpca.
-  async function copyDay(srcWi, dstWi, dayN) {
-    const weeks = state.data.weeks;
-    const sd = weeks[srcWi].days.find((x) => x.n === dayN);
-    const dd = weeks[dstWi].days.find((x) => x.n === dayN);
-    if (!sd || !dd || dd.exercises.length) { toast('Cieľový deň už nie je prázdny'); return; }
-    const list = sd.exercises.slice();
-    state.busy.copyDay = { dst: dstWi, key: `${weeks[dstWi].n}|${dayN}`, srcKey: `${weeks[srcWi].n}|${dayN}`, done: 0, total: list.length };
-    render();
-    let failed = null;
-    for (const e of list) {
-      const col = dd.slots.includes(e.col) ? e.col : dd.slots.find((c) => !dd.exercises.some((x) => x.col === c));
-      if (!col) break;
-      const fields = { name: e.name, sets: e.planned.sets, weight: e.planned.weight, rpe: e.planned.rpe, note: e.planned.note };
-      try {
-        const out = await apiPost({ op: 'plan', week: weeks[dstWi].n, day: dayN, col, expect: '', fields });
-        if (!out.ok) throw new Error(out.error);
-        dd.exercises.push({ col, name: e.name, planned: { ...e.planned }, done: {} });
-        dd.exercises.sort((a, b) => a.col - b.col);
-      } catch (err) { failed = err.message; break; }
-      state.busy.copyDay.done++;
-      render();
-    }
-    state.busy.copyDay = null;
-    render();
-    if (failed) toast('Kopírovanie sa prerušilo: ' + failed);
-    else toast(`Deň ${dayN} skopírovaný do týždňa ${weeks[dstWi].n} – uprav váhy`);
-  }
-
-  async function saveRow(id, remove) {
-    const row = document.getElementById('row-' + id);
-    const val = (k) => document.getElementById(`f-${k}-${id}`).value.trim();
-    const fields = remove ? { name: '', sets: '', weight: '', rpe: '', note: '' } : { name: val('name'), sets: val('sets'), weight: val('weight'), rpe: val('rpe'), note: val('note') };
-    if (!remove && !fields.name) { toast('Zadaj názov cviku'); return; }
-    const btn = row.querySelector('[data-action="save-row"]');
-    btn.disabled = true; btn.textContent = 'Ukladám…';
-    try {
-      const out = await apiPost({ op: 'plan', week: Number(row.dataset.week), day: Number(row.dataset.day), col: Number(row.dataset.col), expect: row.dataset.expect, fields });
-      if (!out.ok) throw new Error(out.error);
-      // Lokálne aktualizuj model, aby sa nemuselo čakať na celé načítanie.
-      const week = state.data.weeks.find((w) => w.n === Number(row.dataset.week));
-      const day = week.days.find((d) => d.n === Number(row.dataset.day));
-      const col = Number(row.dataset.col);
-      day.exercises = day.exercises.filter((e) => e.col !== col);
-      if (!remove) {
-        day.exercises.push({ col, name: fields.name, planned: { sets: fields.sets, weight: fields.weight, rpe: fields.rpe, note: fields.note }, done: findDone(id) });
-        day.exercises.sort((a, b) => a.col - b.col);
+      case 'ex': state.drawer = { kind: 'ex', key: t.dataset.r }; state.pop = null; render(); loadHistory(c); break;
+      case 'body': state.drawer = { kind: 'body' }; state.pop = null; render(); break;
+      case 'close-drawer': state.drawer = null; render(); break;
+      case 'add-week': {
+        const d = dataOf(c.id);
+        const lp = lastPlannedIdx(d);
+        if (lp < 0) break;
+        putDraft(c, { sheet: d.sheet, from: d.weeks[lp].n, mode: 'suggest', rows: {}, extra: [] });
+        render();
+        const gw = app.querySelector('.gridwrap');
+        if (gw) gw.scrollLeft = gw.scrollWidth;
+        break;
       }
-      const key = `${row.dataset.week}|${row.dataset.day}`;
-      state.newRows[key] = (state.newRows[key] || []).filter((c) => c !== col);
-      row.querySelectorAll('[data-field]').forEach((el) => delete el.dataset.dirty);
-      render();
-      toast(remove ? 'Cvik odstránený' : 'Uložené do tabuľky ✓');
-    } catch (err) {
-      btn.disabled = false; btn.textContent = 'Uložiť';
-      toast('Neuložené: ' + err.message);
+      case 'mode': {
+        const dr = getDraft(c);
+        const edited = Object.values(dr.rows).some((x) => x.edited);
+        if (edited && !window.confirm('Ručné úpravy v novom týždni sa nahradia. Pokračovať?')) break;
+        updateDraft((x) => { x.mode = t.dataset.m; x.rows = {}; });
+        render();
+        break;
+      }
+      case 'unedit': updateDraft((dr) => { const s = dr.rows[t.dataset.k] || {}; dr.rows[t.dataset.k] = { skip: s.skip }; }); render(); break;
+      case 'skip': updateDraft((dr) => { dr.rows[t.dataset.k] = { ...(dr.rows[t.dataset.k] || {}), skip: true }; }); render(); break;
+      case 'unskip': updateDraft((dr) => { dr.rows[t.dataset.k] = { ...(dr.rows[t.dataset.k] || {}), skip: false }; }); render(); break;
+      case 'add-extra': {
+        const dayN = Number(t.dataset.day);
+        let newId = null;
+        updateDraft((dr) => {
+          const col = freeSlot(dataOf(c.id), dr, dayN);
+          if (!col) return;
+          newId = Date.now().toString(36);
+          dr.extra = dr.extra || [];
+          dr.extra.push({ id: newId, day: dayN, col, fields: { name: '', sets: '3x10', weight: '', rpe: '8', note: '' } });
+        });
+        render();
+        if (newId) { const el = document.getElementById(`x-${newId}-name`); if (el) el.focus(); }
+        break;
+      }
+      case 'drop-extra': updateDraft((dr) => { dr.extra = (dr.extra || []).filter((x) => x.id !== t.dataset.x); }); render(); break;
+      case 'discard':
+        if (window.confirm('Zahodiť rozpracovaný týždeň? Do tabuľky sa nič nezapísalo.')) { putDraft(c, null); render(); }
+        break;
+      case 'send': await sendDraft(c, false); break;
+      case 'retry-send': await sendDraft(c, true); break;
     }
-  }
-  function findDone(id) {
-    const [w, d, c] = id.split('-').map(Number);
-    const week = state.data.weeks.find((x) => x.n === w);
-    const day = week && week.days.find((x) => x.n === d);
-    const ex = day && day.exercises.find((x) => x.col === c);
-    return ex ? ex.done : {};
   }
 
   // ---------------------------------------------------------------------------
-  // Štart: odkaz má tvar trener.html#s=<base64 URL skriptu>
+  // Štart: odkaz od klienta má tvar trener.html#s=<base64 URL skriptu>
   // ---------------------------------------------------------------------------
   const m = location.hash.match(/#s=([^&]+)/);
   if (m) {
     try {
       const url = decodeURIComponent(escape(atob(m[1])));
-      if (/^https:\/\/script\.google\.com\/.+\/exec$/.test(url)) { state.cfg.scriptUrl = url; save(LS_KEY, state.cfg); }
+      if (/^https:\/\/script\.google\.com\/.+\/exec$/.test(url) && !state.clients.some((x) => x.scriptUrl === url)) {
+        state.clients.push({ id: idFor(url), scriptUrl: url });
+        save(KEY.clients, state.clients);
+        setTimeout(() => toast('Klient pridaný do zoznamu'), 300);
+      }
     } catch (_) { /* neplatný odkaz */ }
     history.replaceState(null, '', location.pathname);
   }
+  const lastView = load(KEY.view, null);
+  if (lastView && state.clients.some((x) => x.id === lastView)) { state.view = 'client'; state.clientId = lastView; }
   render();
-  if (state.cfg.scriptUrl && state.cfg.pass) reload();
+  if (state.cred.pass) loadAll();
 })();

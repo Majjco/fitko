@@ -11,9 +11,9 @@ apka funkčná.
 |---|---|---|---|---|
 | — | Súčasný stav (baseline) | všetci | hotové | [001](001-fitko-baseline/spec.md) |
 | A | Návrh ďalšieho týždňa (objem, +X % progresia, vloženie jedným klikom) | tréner | hotové (v14), čaká na test s trénerom | [002](002-next-week-suggestions/spec.md) |
-| B+D | **Trénerov panel** – zoznam klientov, týždne vedľa seba ako v Exceli, insighty, plánovanie ďalšieho týždňa na tej istej ploche (nahrádza záložky) | tréner | prototyp na odsúhlasenie | [003](003-coach-panel/spec.md) |
+| B+D | **Trénerov panel** – zoznam klientov, týždne vedľa seba ako v Exceli, insighty, plánovanie ďalšieho týždňa na tej istej ploche (nahrádza záložky) | tréner | hotové (v15), čaká na nasadenie skriptu | [003](003-coach-panel/spec.md) |
 | C | Redizajn klientskej apky (vzhľad, pauzy medzi sériami, proaktívne tipy) | klient | čaká | — |
-| E | Viac klientov v jednom portáli | tréner | čaká | — |
+| E | Viac klientov – **zoznam klientov hotový** (každý klient pošle odkaz); zostáva jeden skript pod trénerovým účtom namiesto skriptu u každého klienta | tréner | čiastočne | [003](003-coach-panel/spec.md) |
 
 ## Rozhodnutia
 

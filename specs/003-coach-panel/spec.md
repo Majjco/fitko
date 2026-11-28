@@ -4,7 +4,7 @@
 
 **Created**: 2026-11-28
 
-**Status**: Draft – prototyp v2 (spätná väzba: objem len pri cviku)
+**Status**: Implemented (apka v15, Apps Script v3) – čaká na nasadenie skriptu a test s trénerom
 
 **Input**: User description: "Trénerov dashboard prekopať od začiatku. Tréner nemá klikať
 záložky. Otvorí si portál, vidí svojich klientov, klikne na klienta a vidí to isté ako v

@@ -173,3 +173,16 @@ test('formátovanie', () => {
   assert.equal(C.formatPct(0.05), '+5 %');
   assert.equal(C.formatPct(-0.125), '−12,5 %');
 });
+
+test('trend: hore, stagnácia, pokles, únava', () => {
+  const e = (sets, weight, rpe) => ({ planned: { sets: '3x8' }, done: { sets, weight, rpe } });
+  assert.equal(C.trend('X', [e('3x8', '70', '8'), e('3x8', '72.5', '8'), e('3x8', '75', '8')]).kind, 'up');
+  assert.equal(C.trend('X', [e('3x8', '75', '8'), e('3x8', '75', '8'), e('3x8', '75', '8')]).kind, 'same');
+  assert.equal(C.trend('X', [e('3x8', '75', '8'), e('8, 7, 6', '75', '9')]).kind, 'down');
+  assert.equal(C.trend('X', [e('3x8', '80', '8'), e('3x8', '70', '8')]).kind, 'down');
+  const f = C.trend('X', [e('3x8', '95', '8'), e('3x8', '95', '8.5'), e('3x8', '95', '9')]);
+  assert.equal(f.kind, 'same');
+  assert.equal(f.fatigue, true);
+  assert.equal(C.trend('X', [e('3x8', '95', '8')]).kind, 'none');
+  assert.equal(C.trend('X', []).kind, 'none');
+});
