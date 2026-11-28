@@ -126,3 +126,17 @@ cviku (váha, objem, rekord), ranná váha a fotky.
   „‹ Predošlý / Ďalší ›“ dole. Pásiky ako v Instagram stories neboli zrozumiteľné.
 - SC-001 sa mení na: zápis celého cviku podľa plánu = 1 ťuknutie (Uložiť).
 - **FR-010** *(v20)*: na výber aj vzhľady **Ember** a **Ice** z prototypu (spolu 4: Volt, Ember, Ice, Matrix).
+
+## Zjednodušenie (v22, 2026-11-28)
+
+Rovnaký princíp ako v Progrese (spec 005): čo najmenej textu a sekcií.
+
+- **Dnes**: len pozdrav, plamienok s počtom týždňov v rade, ranná váha (bez trendu a popisov),
+  karta tréningu (Dnes · Deň · prvý cvik · počet cvikov a čas, bez zoznamu cvikov a sérií),
+  tipy len jedným riadkom. Pás týždňa a číslo verzie zmizli (týždeň je v záložke Týždeň, verzia
+  v Nastaveniach).
+- **Týždeň**: bez hlavičky „Plán od trénera“; deň = číslo, dátum a cviky. „Obnoviť plán“ dole.
+- **Tréning**: krížik a čísla cvikov v jednom riadku; namiesto tabuľky Plán/Minule jeden riadok
+  „Minule …“ (plán je predvyplnený vo formulári); cieľové RPE trénera je orámované tlačidlo;
+  poznámka sa otvorí cez „+ Poznámka“; bez vysvetliviek a „potiahni ← →“.
+- **Súhrn**: bez dlaždíc a podnadpisu; rekord = cvik, váha a štítok „↑ +2,5 kg“; objem pri cviku.
