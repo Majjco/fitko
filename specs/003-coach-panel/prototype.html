@@ -57,7 +57,7 @@ h1, h2, h3 { font-family: var(--head); margin: 0; letter-spacing: -0.01em; }
 .back { width: 40px; height: 40px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); display: grid; place-items: center; font-size: 20px; flex: none; }
 .phead h1 { font-size: 26px; }
 .phead .sub { color: var(--muted); }
-.snap { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.snap { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .tile { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; display: grid; gap: 2px; min-width: 0; text-align: left; }
 .tile-k { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
 .tile-v { font-family: var(--head); font-size: 24px; font-weight: 700; }
@@ -101,6 +101,12 @@ table.g { border-collapse: separate; border-spacing: 0; min-width: 100%; }
 .cell .w { font-weight: 800; font-size: 15px; }
 .cell .s { font-size: 12px; color: var(--muted); }
 .cell.up .w { color: var(--up); } .cell.down .w { color: var(--down); }
+.v { font-size: 12px; color: var(--muted); margin-top: 2px; white-space: nowrap; }
+.v b { color: var(--fg); font-weight: 700; }
+.v .p { font-weight: 800; }
+.v .p.up { color: var(--up); } .v .p.down { color: var(--down); }
+.legend-inline { font-size: 12px; color: var(--muted); }
+.legend-inline b { color: var(--fg); }
 .cell.plan { opacity: .55; font-style: italic; }
 .cell.plan .w { font-weight: 600; }
 .cell.empty { background: repeating-linear-gradient(135deg, transparent 0 6px, var(--surface-2) 6px 7px); }
@@ -154,7 +160,7 @@ tr.dim { opacity: .35; }
 .note .who { font-size: 11px; color: var(--muted); font-weight: 700; }
 .toast { position: fixed; left: 50%; bottom: 90px; transform: translateX(-50%); background: var(--fg); color: var(--bg); padding: 10px 16px; border-radius: 10px; font-weight: 700; z-index: 50; max-width: calc(100% - 32px); }
 @media (max-width: 820px) {
-  .snap { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .snap { grid-template-columns: minmax(0, 1fr); }
   .g .ex { min-width: 170px; }
 }
 @media (prefers-reduced-motion: no-preference) { tr { transition: opacity .2s; } }
@@ -666,18 +672,14 @@ tr.dim { opacity: .35; }
   }
   function renderPanel() {
     var g = insights();
-    var v3 = weekVol(3), v4 = weekVol(4);
-    var v4same = ROWS.reduce(function (a, r) { return a + (cellOf(r, 4) && cellOf(r, 4).d ? vol(r, 3) : 0); }, 0);
-    var pct = v4same ? v4 / v4same - 1 : 0;
     var snap = '<div class="snap">' +
       '<div class="tile"><span class="tile-k">Tento týždeň (T4)</span><span class="tile-v">2<small>/3 tréningy</small></span><span class="tile-s">Deň 3 · Pull čaká na sobotu</span></div>' +
-      '<div class="tile"><span class="tile-k">Objem týždňa</span><span class="tile-v">' + C.formatVolume(v4) + '<small> kg</small></span><span class="tile-s"><span class="' + (pct >= 0 ? 'up' : 'down') + '">' + C.formatPct(pct) + '</span> oproti T3 (rovnaké dni)</span></div>' +
       '<button class="tile" data-a="body"><span class="tile-k">Ranná váha</span><span class="tile-v">84,2<small> kg</small></span><span class="tile-s"><span class="up">−0,6 kg</span> za 7 dní</span>' + sparkline(BODY) + '</button>' +
       '<button class="tile" data-a="body"><span class="tile-k">Fotky progresu</span><span class="tile-v">22.11.<small> · 3 fotky</small></span><span class="tile-s">ďalšie v nedeľu</span></button></div>';
     var chip = function (key, cls, label) { var n = g[key].length; if (!n) return ''; return '<button class="ins ' + cls + (state.focus === key ? ' on' : '') + '" data-a="focus" data-k="' + key + '"><b>' + n + '</b> ' + label + '</button>'; };
     var ins = '<div class="insights"><span class="lbl">Na prvý pohľad</span>' + chip('up', 'up', 'cvikov ide hore') + chip('same', 'same', 'stagnuje') + chip('down', 'down', 'klesá') + chip('fatigue', 'warn', 'rastie únava (RPE pri rovnakej váhe)') + chip('notes', 'note', 'nové poznámky klienta') + '</div>';
     var d = state.draft;
-    var tb = '<div class="toolbar"><div class="seg" role="group" aria-label="Zobraziť v bunkách"><button class="' + (state.metric === 'kg' ? 'on' : '') + '" data-a="metric" data-m="kg">Váha</button><button class="' + (state.metric === 'vol' ? 'on' : '') + '" data-a="metric" data-m="vol">Objem</button></div><span class="spacer"></span>' +
+    var tb = '<div class="toolbar"><span class="legend-inline">V bunke: <b>váha</b> · série × opakovania · RPE · <b>objem cviku</b> (série × opak. × kg) so zmenou oproti minulému týždňu</span><span class="spacer"></span>' +
       (d ? '' : '<button class="btn primary" data-a="add">+ Pridať týždeň ' + (state.sent ? 6 : 5) + '</button>') + '</div>';
     return protoBar() + '<div class="phead"><button class="back" data-a="clients" aria-label="Späť na klientov">‹</button><div><h1>Marián</h1><div class="sub">Blok COMEBACK NOV · od 2. 11. · 3 tréningy týždenne</div></div></div>' +
       snap + ins + tb + '<div class="gridwrap">' + renderGrid(g) + '</div>';
@@ -697,9 +699,10 @@ tr.dim { opacity: .35; }
       if (b) cls = a > b * 1.005 ? 'up' : a < b * 0.995 ? 'down' : '';
       return '<td class="cell ' + cls + '">' + notes + '<div class="w">' + C.formatVolume(a) + '</div><div class="s">kg · ' + (b ? C.formatPct(a / b - 1) : '–') + '</div></td>';
     }
-    var pv = cellOf(r, prevN);
-    if (pv && pv.d) { var a1 = vol(r, w.n), b1 = vol(r, prevN); cls = a1 > b1 * 1.005 ? 'up' : a1 < b1 * 0.995 ? 'down' : ''; }
-    return '<td class="cell ' + cls + '">' + notes + '<div class="w">' + esc(c.d.weight.replace(/\./g, ',')) + ' kg</div><div class="s">' + esc(prettySets(c.d.sets)) + (c.d.rpe ? ' · RPE ' + esc(String(c.d.rpe).replace('.', ',')) : '') + '</div></td>';
+    var pv = cellOf(r, prevN), a1 = vol(r, w.n), b1 = pv && pv.d ? vol(r, prevN) : 0;
+    if (b1) cls = a1 > b1 * 1.005 ? 'up' : a1 < b1 * 0.995 ? 'down' : '';
+    var vl = a1 ? '<div class="v">objem <b>' + C.formatVolume(a1) + '</b>' + (b1 ? ' <span class="p ' + cls + '">' + C.formatPct(a1 / b1 - 1) + '</span>' : '') + '</div>' : '';
+    return '<td class="cell ' + cls + '">' + notes + '<div class="w">' + esc(c.d.weight.replace(/\./g, ',')) + ' kg</div><div class="s">' + esc(prettySets(c.d.sets)) + (c.d.rpe ? ' · RPE ' + esc(String(c.d.rpe).replace('.', ',')) : '') + '</div>' + vl + '</td>';
   }
   function draftCell(r) {
     var d = state.draft, v = d.vals[r.id];
@@ -708,11 +711,13 @@ tr.dim { opacity: .35; }
     var dw = wNum(v.weight) - wNum(base.weight);
     var chgW = String(v.weight) !== String(base.weight), chgS = String(v.sets) !== String(base.sets);
     var edited = d.edited[r.id];
+    var lastN = doneWeeks(r).pop(), baseVol = lastN ? vol(r, lastN) : 0, nv = C.totalKg(C.volume(r.name, v, v));
+    var volLine = nv ? '<div class="v">objem <b>' + C.formatVolume(nv) + '</b>' + (baseVol ? ' <span class="p ' + (nv > baseVol * 1.005 ? 'up' : nv < baseVol * 0.995 ? 'down' : '') + '">' + C.formatPct(nv / baseVol - 1) + '</span> vs. T' + lastN : '') + '</div>' : '';
     var why = edited ? '<div class="why">upravené tebou</div>' :
       '<div class="why' + (v.review ? ' rev' : '') + '" title="' + esc(v.why) + '">' + (dw ? '<span class="d ' + (dw > 0 ? 'up' : 'down') + '">' + (dw > 0 ? '+' : '−') + kg(Math.abs(dw)) + ' kg</span>' : '') + '<span>' + esc(shortWhy(v)) + '</span></div>';
     return '<td class="draft"><div class="dcell">' +
       '<div class="dline"><input class="wt ' + (chgW ? 'chg' : '') + '" data-in="weight" data-r="' + r.id + '" value="' + esc(v.weight) + '" aria-label="Váha ' + esc(nice(r.name)) + '"><span class="unit">kg</span></div>' +
-      '<div class="dline"><input class="' + (chgS ? 'chg' : '') + '" data-in="sets" data-r="' + r.id + '" value="' + esc(v.sets) + '" aria-label="Série"><input data-in="rpe" data-r="' + r.id + '" value="' + esc(v.rpe) + '" aria-label="RPE" style="max-width:56px"></div>' + why + '</div></td>';
+      '<div class="dline"><input class="' + (chgS ? 'chg' : '') + '" data-in="sets" data-r="' + r.id + '" value="' + esc(v.sets) + '" aria-label="Série"><input data-in="rpe" data-r="' + r.id + '" value="' + esc(v.rpe) + '" aria-label="RPE" style="max-width:56px"></div>' + volLine + why + '</div></td>';
   }
   function shortWhy(v) {
     if (v.rule === 'copy') return 'kópia T4';
@@ -772,11 +777,11 @@ tr.dim { opacity: .35; }
     if (state.view !== 'panel' || !state.draft) return;
     var s = draftStats(), d = state.draft;
     var el = document.createElement('div'); el.className = 'bar'; el.id = 'bar';
-    el.innerHTML = '<div class="bar-in"><div class="info"><b>Týždeň ' + d.n + ' je rozpracovaný</b><br><span id="bar-sub">' + s.changed + ' zmien oproti T4 · plánovaný objem ' + C.formatPct(s.pct) + ' · uložené v prehliadači</span></div>' +
+    el.innerHTML = '<div class="bar-in"><div class="info"><b>Týždeň ' + d.n + ' je rozpracovaný</b><br><span id="bar-sub">' + s.changed + ' zmien oproti T4 · uložené v prehliadači</span></div>' +
       '<button class="btn" data-a="discard">Zahodiť</button><button class="btn primary" data-a="send">Odoslať klientovi</button></div>';
     document.body.appendChild(el);
   }
-  function updateBar() { var s = draftStats(); var el = document.getElementById('bar-sub'); if (el) el.textContent = s.changed + ' zmien oproti T4 · plánovaný objem ' + C.formatPct(s.pct) + ' · uložené v prehliadači'; }
+  function updateBar() { var s = draftStats(); var el = document.getElementById('bar-sub'); if (el) el.textContent = s.changed + ' zmien oproti T4 · uložené v prehliadači'; }
 
   // ---------------- Popover, bočný panel, toast ----------------
   function closeLayer() { layer.innerHTML = ''; }

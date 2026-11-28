@@ -4,7 +4,7 @@
 
 **Created**: 2026-11-28
 
-**Status**: Draft – prototyp na odsúhlasenie
+**Status**: Draft – prototyp v2 (spätná väzba: objem len pri cviku)
 
 **Input**: User description: "Trénerov dashboard prekopať od začiatku. Tréner nemá klikať
 záložky. Otvorí si portál, vidí svojich klientov, klikne na klienta a vidí to isté ako v
@@ -69,8 +69,8 @@ bunke a farby a trendy zodpovedajú číslam.
 1. **Given** blok má 4 týždne, **When** tréner otvorí klienta, **Then** vidí 4 stĺpce týždňov
    s dátumami a všetky cviky po dňoch bez prepínania záložiek.
 2. **Given** cvik v týždni klient odcvičil, **When** sa zobrazí bunka, **Then** obsahuje váhu
-   (výrazne), série × opakovania a RPE; pri vyššej váhe alebo objeme ako minulý týždeň je
-   zelená, pri nižšej červená, rovnaká neutrálna.
+   (výrazne), série × opakovania, RPE a **objem cviku** so zmenou v % oproti minulému týždňu;
+   pri vyššom objeme je zelená, pri nižšom červená, rovnaký neutrálna.
 3. **Given** cvik ešte nie je odcvičený, **When** sa zobrazí bunka, **Then** ukazuje plán
    trénera svetlo (odlíšene od výkonu).
 4. **Given** klient alebo tréner k cviku napísal poznámku, **When** sa zobrazí bunka, **Then**
@@ -85,8 +85,9 @@ bunke a farby a trendy zodpovedajú číslam.
 
 ### User Story 3 – Snapshot a insighty (Priority: P1)
 
-Nad plochou je súhrn na prvý pohľad: priebeh tohto týždňa (koľko tréningov odcvičil), objem
-týždňa oproti minulému, ranná váha a jej trend, posledné fotky. Pod ním insighty: koľko
+Nad plochou je súhrn na prvý pohľad: priebeh tohto týždňa (koľko tréningov odcvičil), ranná
+váha a jej vývoj, posledné fotky. Celkový objem týždňa sa nezobrazuje – súčet za všetky cviky
+trénerovi nič nehovorí; objem je vždy pri konkrétnom cviku. Pod ním insighty: koľko
 cvikov ide hore, ktoré stagnujú, ktoré klesajú a na čo si dať pozor (napr. rastúce RPE pri
 rovnakej váhe, nezvládnuté opakovania, nová poznámka klienta). Klik na insight zvýrazní
 dotknuté riadky.
@@ -185,8 +186,10 @@ rozpracovaného týždňa.
 - **FR-002**: Klient sa MUSÍ dať pridať otvorením jeho odkazu; zoznam si portál pamätá
   v trénerovom prehliadači, prihlasovacie údaje trénera sa zadávajú raz.
 - **FR-003**: Panel klienta MUSÍ zobraziť aktuálny blok ako mriežku: riadky = cviky po dňoch,
-  stĺpce = týždne s dátumami; bunka = odcvičená váha, série × opakovania, RPE, alebo plán, ak
-  ešte nie je odcvičené.
+  stĺpce = týždne s dátumami; bunka = odcvičená váha, série × opakovania, RPE a objem cviku so
+  zmenou oproti minulému týždňu, alebo plán, ak ešte nie je odcvičené. Rozpracovaný týždeň
+  ukazuje pri každom cviku plánovaný objem a zmenu oproti poslednému výkonu.
+- **FR-003a**: Panel NESMIE zobrazovať celkový objem týždňa ani tréningu (súčet cez cviky).
 - **FR-004**: Bunky MUSIA farebne ukazovať zmenu oproti predošlému týždňu a značku poznámky
   (klienta aj trénera) s textom na klik.
 - **FR-005**: Pri každom cviku MUSÍ byť trend bloku (↑ / → / ↓) podľa objemu a pravidiel
