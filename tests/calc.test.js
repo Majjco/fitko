@@ -195,3 +195,27 @@ test('série s vlnovkou (približne): „2x~8“, „2x~12 obe“', () => {
   // „Ok“ pri pláne 2x~8 a 10 kg = 160 kg
   assert.deepEqual(C.volume('X', { sets: '2x~8' }, { sets: 'Ok', weight: '10' }), [{ value: 160, unit: 'kg' }]);
 });
+
+test('progres: e1RM, opakovania, objem', () => {
+  assert.equal(Math.round(C.e1rm(50, 10) * 10) / 10, 66.7);
+  assert.equal(C.e1rm(0, 10), 0);
+  assert.equal(C.topReps('2x8'), 8);
+  assert.equal(C.topReps('10, 9, 8'), 10);
+  assert.equal(C.topReps('Ok'), 0);
+  assert.equal(C.setsVolume('3x10', 50), 1500);
+  assert.equal(C.setsVolume('10, 9, 8', 20), 540);
+  assert.equal(C.setsVolume('', 20), 0);
+});
+
+test('progres: rekordy – váha, opakovania, objem', () => {
+  const p = (kg, reps, sets = 3) => ({ kg, reps, vol: kg * reps * sets });
+  assert.deepEqual(C.record([p(70, 8), p(75, 8)], p(77.5, 8)), { type: 'kg', diff: 2.5 });
+  assert.deepEqual(C.record([p(75, 8), p(75, 8)], p(75, 10)), { type: 'reps', diff: 2 });
+  const v = C.record([p(80, 8, 2), p(75, 8, 3)], p(75, 8, 4));
+  assert.equal(v.type, 'vol');
+  assert.equal(C.recordChip(v), '+33,3 % objem');
+  assert.equal(C.record([p(80, 8)], p(75, 8)), null);
+  assert.equal(C.record([], p(80, 8)), null, 'prvý záznam nie je rekord');
+  assert.equal(C.recordChip({ type: 'kg', diff: 2.5 }), '+2,5 kg');
+  assert.equal(C.recordChip({ type: 'reps', diff: 2 }), '+2 opak.');
+});

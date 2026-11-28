@@ -101,12 +101,19 @@ function assert(c, msg) { if (!c) throw new Error('FAIL: ' + msg); console.log('
 
   // Progres a Týždeň
   await page.click('[data-action=tab][data-tab=progress]');
-  await page.waitForSelector('.pex');
-  assert((await page.textContent('.list')).includes('Bench press'), 'Progres: zoznam cvikov');
-  if (OUT) await page.screenshot({ path: `${OUT}/v17-progress.png` });
-  await page.click('.pex');
+  await page.waitForSelector('.pxrow');
+  assert((await page.textContent('.plist')).includes('Bench press'), 'Progres: zoznam cvikov');
+  assert(await page.isVisible('.patt'), 'Progres: dochádzka');
+  if (OUT) await page.screenshot({ path: `${OUT}/v21-progress.png` });
+  await page.click('.pxrow');
   await page.waitForSelector('.sheet .chart');
+  assert(await page.locator('.sheet .hrow').count() > 0, 'detail: história');
+  await page.click('.sheet [data-action=pmetric][data-m=vol]');
+  assert(await page.isVisible('.sheet .chart'), 'detail: graf objemu');
   await page.click('.sheet [data-action=close-sheet].icon-btn');
+  await page.click('[data-action=ptab][data-tab=telo]');
+  if (OUT) await page.screenshot({ path: `${OUT}/v21-body.png` });
+  await page.click('[data-action=ptab][data-tab=sila]');
   await page.click('[data-action=tab][data-tab=week]');
   assert((await page.textContent('.weekbar')).includes('Týždeň'), 'Týždeň: prehľad');
   if (OUT) await page.screenshot({ path: `${OUT}/v17-week.png` });
@@ -115,7 +122,7 @@ function assert(c, msg) { if (!c) throw new Error('FAIL: ' + msg); console.log('
   await page.click('[data-action=tab][data-tab=today]');
   await page.click('[data-action=settings]');
   assert(await page.isVisible('[data-action=copy-coach]'), 'nastavenia: odkaz pre trénera');
-  assert((await page.textContent('.app-version')).includes('20'), 'verzia 20');
+  assert((await page.textContent('.app-version')).includes('21'), 'verzia 21');
   // téma Matrix
   await page.click('[data-action=theme][data-theme=matrix]');
   assert(await page.evaluate(() => document.documentElement.dataset.theme) === 'matrix', 'téma Matrix zapnutá');

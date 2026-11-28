@@ -26,8 +26,9 @@ platí len v danom telefóne. Dole tri obrazovky: **Dnes · Týždeň · Progres
 - **Súhrn po tréningu**: čas, počet sérií, rekordy, objem pri každom cviku (série × opakovania × kg)
   so zmenou oproti minule; zapíše `WORKOUT TIME` a `SESH RPE`.
 - **Týždeň**: plán týždňa po dňoch, prepínanie týždňov, ľubovoľný deň sa dá otvoriť a zapísať.
-- **Progres**: cviky s mini grafom a trendom, detail cviku (rekord, graf aj zo starších blokov),
-  ranná váha, fotky progresu.
+- **Progres** (Sila · Telo): o koľko % je klient silnejší v bloku, dochádzka, rekordy (váha,
+  opakovania, objem) a cviky s farebným pruhom trendu; detail cviku (váha / objem, história).
+  Telo: ranná váha so 7-dňovým priemerom a fotky progresu.
 - **Ranná váha** sa ukladá do záložky **„Váha“** a **fotky progresu** na **tvoj Google Drive**
   (zdieľané len s vlastníkom tabuľky, záložka **„Fotky“**).
 - Funguje **offline** – zápisy počkajú a odošlú sa neskôr. Dá sa pridať na plochu ako appka.

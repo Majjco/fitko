@@ -34,7 +34,7 @@ const days = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return i
   const cardA = await page.textContent('.ccard[data-a=open]:has-text("Marián")');
   assert(/klesá|klesajú/.test(cardA) && /nová|nové/.test(cardA), 'karta: pokles a nové poznámky');
   assert(cardA.includes('84,2'), 'karta: ranná váha');
-  assert((await page.textContent('.app-version')).includes('verzia 20'), 'panel ukazuje verziu 20');
+  assert((await page.textContent('.app-version')).includes('verzia 21'), 'panel ukazuje verziu 21');
   if (OUT) await page.screenshot({ path: `${OUT}/panel-clients.png` });
 
   // 3) panel klienta A
