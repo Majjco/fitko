@@ -85,5 +85,13 @@ Ranná váha: graf denných vážení s čiarou 7-dňového priemeru, posledná,
   1. **váhový rekord** – najťažšia odcvičená váha (hlavné číslo na karte, „koľko dávaš“);
   2. **rekord v opakovaniach** – pri rovnakej alebo vyššej váhe viac opakovaní ako kedykoľvek;
   3. **rekord v objeme** – najväčší objem cviku za jeden tréning (série × opakovania × kg).
-  Karta rekordu ukazuje veľkú váhu, typ rekordu a o koľko; ďalší dosiahnutý typ menším písmom.
   Rovnaké pravidlá platia pre ohlásenie rekordu pri zápise cviku a v súhrne tréningu.
+
+## Rozhodnutia (prototyp v6) – jednoduchosť
+
+- **Čo najmenej textu.** Karta rekordu = **číslo** (váha) + **názov cviku** + **jeden štítok
+  trendu**: „↑ +2,5 kg“ (váhový rekord), „↑ +2 opak.“ (rekord v opakovaniach) alebo
+  „↑ +8 % objem“ (rekord v objeme). Žiadne ďalšie popisy.
+- Riadok cviku: názov, pod ním len váha (v „Pozor na“ + krátky dôvod: „stagnuje“,
+  „nezvládnuté opak.“, „bolia kolená“), vpravo %.
+- Hlavné číslo: „Sila“ + % + „silnejší ako na začiatku bloku“. Dlaždice bez podpisov navyše.
