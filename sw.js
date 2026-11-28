@@ -1,8 +1,8 @@
 // Service worker: apka sa otvorí okamžite z pamäte telefónu – aj bez signálu.
 // Pri novej verzii (zmenené CACHE) sa súbory stiahnu načisto zo servera
 // (cache: 'reload' – obíde 10-minútovú pamäť GitHub Pages) a apka sa sama reštartuje.
-const CACHE = 'fitko-v13';
-const SHELL = ['./', 'index.html', 'styles.css', 'app.js', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-180.png'];
+const CACHE = 'fitko-v14';
+const SHELL = ['./', 'index.html', 'styles.css', 'calc.js', 'app.js', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-180.png'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(

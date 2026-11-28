@@ -4,7 +4,7 @@
 
 **Created**: 2026-11-28
 
-**Status**: Draft (v2 – doplnený objem a cieľové % rastu)
+**Status**: Implemented (apka v14) – čaká na nasadenie Apps Scriptu a test s trénerom
 
 **Input**: User description: "Aby trénerovi portál navrhoval, čo má zverenec mať ďalší týždeň,
 a aby to jedným klikom vedel vložiť do svojej tabuľky. Návrhy podľa pravidiel (nie AI).

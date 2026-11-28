@@ -18,7 +18,7 @@ a trénerov Progres zobrazia objem.
 **Primary Dependencies**: žiadne
 **Storage**: Google tabuľka trénera (nová záložka „Fitko nastavenia“: Nastavenie | Hodnota);
 rozpracovaný náhľad v `localStorage` portálu
-**Testing**: `node --test tests/` (vstavaný test runner Node, bez npm balíčkov) pre `calc.js`;
+**Testing**: `node --test tests/*.test.js` (vstavaný test runner Node, bez npm balíčkov) pre `calc.js`;
 Playwright s podvrhnutým Apps Scriptom (route) pre UI; ručné kroky pre `Code.gs`
 **Target Platform**: mobilný prehliadač (klient, PWA), desktop + mobil (portál)
 **Project Type**: statická webová apka + Apps Script
@@ -114,7 +114,7 @@ README.md             # nová funkcia + aktualizácia skriptu
 
 ## Overenie
 
-1. `node --test tests/` – parsovanie, objem, každé pravidlo R1–R6, superset, alternatívy,
+1. `node --test tests/*.test.js` – parsovanie, objem, každé pravidlo R1–R6, superset, alternatívy,
    desatinná čiarka, rozsah váhy.
 2. Playwright: `trener.html` s podvrhnutými odpoveďami skriptu → náhľad, alternatíva, úprava,
    ponechanie, reload zachová úpravy, vloženie pošle správne riadky, čiastočné zlyhanie a
@@ -128,3 +128,15 @@ README.md             # nová funkcia + aktualizácia skriptu
 |---|---|---|
 | Nový súbor `calc.js` | objem musí byť rovnaký v apke aj v portáli (SC-005) | kopírovanie do `app.js` a `coach.js` by zdvojilo zložitú logiku a hrozil by rozdiel |
 | Priečinok `tests/` (Node test runner) | pravidlá progresie majú veľa vetiev; chyba by navrhla zlú váhu | ručné overovanie všetkých vetiev pri každej zmene je nespoľahlivé; nepridáva žiadnu závislosť ani build krok |
+
+## Výsledok overenia (2026-11-28)
+
+- `node --test tests/*.test.js`: 21/21.
+- Playwright s podvrhnutým Apps Scriptom: 27 kontrol portálu (desktop aj mobil – návrh, pravidlá
+  R3/R4/R5/R6, na kontrolu, alternatíva, ručná úprava, ponechanie, krok, cieľ %, obnovenie
+  stránky, vloženie, čiastočné zlyhanie a opakovanie, Progres v objeme) a súhrn klientskej apky
+  s objemom; bez JS chýb.
+- Zistené pri teste: pri rozsahu opakovaní (`3x8-10`) je najmenší krok k cieľu často +1
+  opakovanie pri tej istej váhe – v tabuľke sa nič nezmení a cieľ („cieľ 3×9 opak.“) je len
+  v dôvode. Tréner ho môže dopísať do poznámky pre klienta.
+- Zostáva: ručné overenie `Code.gs` po nasadení (vlastník).

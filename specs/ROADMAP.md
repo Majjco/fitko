@@ -10,7 +10,7 @@ apka funkčná.
 | # | Funkcia | Pre koho | Stav | Spec |
 |---|---|---|---|---|
 | — | Súčasný stav (baseline) | všetci | hotové | [001](001-fitko-baseline/spec.md) |
-| A | Návrh ďalšieho týždňa (pravidlá progresie, vloženie jedným klikom) | tréner | spec | [002](002-next-week-suggestions/spec.md) |
+| A | Návrh ďalšieho týždňa (objem, +X % progresia, vloženie jedným klikom) | tréner | hotové (v14), čaká na test s trénerom | [002](002-next-week-suggestions/spec.md) |
 | B | Trénerský dashboard (grafy všetkých cvikov naprieč blokmi, objem, dochádzka, váha, fotky) | tréner | čaká | — |
 | C | Redizajn klientskej apky (vzhľad, pauzy medzi sériami, proaktívne tipy) | klient | čaká | — |
 | D | Plánovanie bez Excelu (celé bloky, šablóny, presúvanie cvikov) | tréner | čaká | — |
@@ -24,3 +24,5 @@ apka funkčná.
 - 2026-11-28: Tabuľky klientov **vlastní tréner** → pre funkciu E stačí jeden Apps Script pod
   trénerovým účtom so zoznamom klientov (zmení predpoklad „1 skript = 1 klient“ z baseline;
   bude treba doplniť constitution).
+- 2026-11-28: Hlavná miera záťaže je **objem** = série × opakovania × kg. Návrh cieli na +5 %
+  objemu týždenne (nastaviteľné 0–10 %); pri vysokom RPE alebo nezvládnutí sa nezvyšuje.

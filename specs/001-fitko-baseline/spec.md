@@ -4,7 +4,7 @@
 
 **Created**: 2026-11-28
 
-**Status**: Implemented (baseline k verzii apky 13)
+**Status**: Implemented (baseline k verzii apky 13; zmeny od verzie 14 sú v ďalších spec)
 
 **Input**: User description: "Spätne zdokumentovať, čo apka Fitko a trénerov portál vedia dnes,
 aby nové funkcie nič nerozbili."
@@ -305,7 +305,8 @@ tabuľke vrátane posunutých dátumov.
 - **FR-009**: Po uložení cviku MUSÍ apka otvoriť ďalší nezapísaný cvik; po poslednom otvoriť
   súhrn tréningu.
 - **FR-010**: Súhrn MUSÍ ukázať počet zapísaných cvikov, zlepšenia váhy oproti minule a
-  trvanie; uloženie súhrnu MUSÍ zapísať trvanie a celkové RPE do riadku dňa.
+  trvanie; uloženie súhrnu MUSÍ zapísať trvanie a celkové RPE do riadku dňa. *(Rozšírené v
+  [002](../002-next-week-suggestions/spec.md): objem tréningu a cvikov.)*
 
 **Offline a spoľahlivosť**
 
@@ -350,7 +351,8 @@ tabuľke vrátane posunutých dátumov.
 - **FR-025**: Tréner MUSÍ môcť upraviť PLANNED hodnoty, pridať cvik do voľného stĺpca a
   odstrániť cvik, ktorý klient ešte nezapísal; zápis sa odmietne pri konflikte.
 - **FR-026**: Tréner MUSÍ môcť skopírovať deň do prázdneho dňa iného týždňa a naplánovať ďalší
-  týždeň (s posunom dátumov, prípadne s pridaním nového bloku).
+  týždeň (s posunom dátumov, prípadne s pridaním nového bloku). *(Rozšírené v
+  [002](../002-next-week-suggestions/spec.md): návrh ďalšieho týždňa podľa objemu.)*
 
 ### Key Entities
 

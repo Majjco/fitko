@@ -8,7 +8,8 @@
   const DAY_NAMES = ['Ne', 'Po', 'Ut', 'St', 'Št', 'Pi', 'So'];
   const RPE_VALUES = ['6', '7', '7.5', '8', '8.5', '9', '9.5', '10'];
   const HISTORY_TTL = 24 * 60 * 60 * 1000;
-  const APP_VERSION = 13; // zvýš pri každej zmene (zobrazuje sa dole v apke)
+  const C = window.FitkoCalc; // objem a progresia (calc.js)
+  const APP_VERSION = 14; // zvýš pri každej zmene (zobrazuje sa dole v apke)
   const LS = {
     config: 'fitko.config',
     plan: 'fitko.plan',
@@ -1038,9 +1039,13 @@
         const b = before[i];
         if (v != null && b != null && v > b) gains.push({ part: parts[i] || parts[0], from: b, to: v, diff: v - b });
       });
-      return { ex, done, last, isDone: hasAny(done), gains };
+      // Objem = série × opakovania × kg (calc.js), rovnaký výpočet ako v trénerovom portáli.
+      const vol = hasAny(done) ? C.totalKg(C.volume(ex.name, ex.planned, done)) : 0;
+      const lastVol = last ? C.totalKg(C.volume(ex.name, last.planned, last.done)) : 0;
+      return { ex, done, last, isDone: hasAny(done), gains, vol, lastVol };
     });
-    return { rows, done: rows.filter((r) => r.isDone).length, gains: rows.flatMap((r) => r.gains) };
+    const totalVol = rows.reduce((a, r) => a + r.vol, 0);
+    return { rows, done: rows.filter((r) => r.isDone).length, gains: rows.flatMap((r) => r.gains), totalVol };
   }
 
   function renderSummary() {
@@ -1062,13 +1067,15 @@
         <div class="sum-name">${esc(splitParts(r.ex.name).map(cap).join(' + '))}</div>
         <div class="sum-val">${r.isDone ? esc(doneSummary(r.done)) : 'nevyplnené'}</div>
         ${r.last ? `<div class="sum-last">minule ${esc(doneSummary(r.last.done))}</div>` : ''}
+        ${r.vol > 0 ? `<div class="sum-vol">objem <b>${esc(C.formatVolume(r.vol))} kg</b>${r.lastVol > 0 ? ` <span class="${r.vol > r.lastVol ? 'up' : r.vol < r.lastVol ? 'down' : ''}">${esc(C.formatPct(r.vol / r.lastVol - 1))} oproti minule</span>` : ''}</div>` : ''}
       </div>`).join('');
 
     return `<div class="sheet-backdrop" data-action="close-sheet"><div class="sheet" role="dialog" aria-label="Súhrn tréningu">
       <div class="grab"></div>
       <div class="sheet-head"><h2>Tréning hotový 💪</h2><button class="icon-btn" data-action="close-sheet" aria-label="Zavrieť">${ICON.close}</button></div>
       <p>Týždeň ${week.n} · Deň ${day.n} · ${esc(formatDate(day.date))}</p>
-      <div class="tiles">
+      <div class="tiles four">
+        <div class="tile"><div class="tile-v">${data.totalVol > 0 ? esc(C.formatVolume(data.totalVol)) : '–'}<small>${data.totalVol > 0 ? ' kg' : ''}</small></div><div class="tile-k">objem tréningu</div></div>
         <div class="tile"><div class="tile-v">${data.done}<small>/${day.exercises.length}</small></div><div class="tile-k">cvikov</div></div>
         <div class="tile"><div class="tile-v">${data.gains.length}</div><div class="tile-k">zlepšení</div></div>
         <div class="tile"><div class="tile-v">${mins || '–'}<small>${mins ? ' min' : ''}</small></div><div class="tile-k">trvanie</div></div>
