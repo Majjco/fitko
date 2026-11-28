@@ -68,3 +68,10 @@ Ranná váha: graf denných vážení s čiarou 7-dňového priemeru, posledná,
 
 - e1RM je odhad; pri vysokom počte opakovaní (>12) je menej presný – zobrazuje sa ako „odhad“.
 - Hlavné číslo počíta len cviky s aspoň 2 záznamami v aktuálnom bloku.
+
+## Zmena po spätnej väzbe (prototyp v2)
+
+- V zoznamoch cvikov **bez čiarových mini grafov** (pôsobili divne). Namiesto nich:
+  **štítok** so šípkou a % (zelený rast „za blok“, sivá stagnácia / červený pokles „oproti
+  minule“) a **rad štvorčekov po týždňoch** (zelený = lepšie ako minulý týždeň, sivý = rovnako,
+  červený = horšie). Graf ostáva len v detaile cviku.

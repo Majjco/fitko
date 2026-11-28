@@ -95,7 +95,17 @@ button:focus-visible { outline: 2px solid var(--a1); outline-offset: 2px; }
 .spark { width: 70px; height: 30px; flex: none; }
 .spark path { fill: none; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
 .spark.up path { stroke: var(--a1); } .spark.down path { stroke: var(--down); } .spark.same path { stroke: var(--muted); }
-.why { font-size: 12px; color: var(--warn); font-weight: 600; }
+.why { font-size: 12px; color: var(--warn); font-weight: 600; display: block; }
+.wk { display: flex; gap: 4px; align-items: center; margin-top: 7px; }
+.wk i { width: 18px; height: 8px; border-radius: 3px; background: var(--surface-2); display: block; }
+.wk i.up { background: linear-gradient(120deg, var(--a1), var(--a2)); }
+.wk i.down { background: var(--down); }
+.wk i.same { background: var(--dim); }
+.wk small { font-size: 10px; color: var(--dim); margin-left: 4px; }
+.delta { display: inline-block; font-family: var(--disp); font-weight: 800; font-style: italic; font-size: 20px; padding: 4px 10px; border-radius: 10px; white-space: nowrap; }
+.delta.up { background: rgba(212, 255, 58, .12); color: var(--a1); }
+.delta.down { background: rgba(255, 107, 107, .14); color: var(--down); }
+.delta.same { background: var(--surface-2); color: var(--muted); }
 .filters { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; margin-bottom: 12px; }
 .filters::-webkit-scrollbar { display: none; }
 .filters button { flex: none; height: 36px; padding: 0 14px; border-radius: 99px; background: var(--surface); border: 1px solid var(--line); font-weight: 700; font-size: 13px; color: var(--muted); }
@@ -222,10 +232,21 @@ td.pr-c { color: var(--a1); font-weight: 800; }
     var lab = labels.map(function (l, i) { return l ? '<text class="ax" x="' + x(i) + '" y="' + (H - 6) + '" text-anchor="' + (i === 0 ? 'start' : i === labels.length - 1 ? 'end' : 'middle') + '">' + l + '</text>' : ''; }).join('');
     return '<svg class="chart" viewBox="0 0 ' + W + ' ' + H + '" role="img">' + grid + body + lab + '</svg>';
   }
+  // Týždeň po týždni: zelený = lepšie ako minule, sivý = rovnako, červený = horšie.
+  function weeks(x) {
+    return '<span class="wk" aria-label="Vývoj po týždňoch">' + x.e.slice(1).map(function (v, i) {
+      var d = v / x.e[i] - 1;
+      var c = d > 0.005 ? 'up' : d < -0.005 ? 'down' : 'same';
+      return '<i class="' + c + '" title="T' + (i + 2) + ': ' + pct(d) + '"></i>';
+    }).join('') + '<small>' + (x.e.length - 1) + ' týž.</small></span>';
+  }
   function exRow(x, showWhy) {
     var last = x.s[x.s.length - 1];
-    return '<button class="ex" data-a="ex" data-n="' + esc(x.n) + '"><div class="nm"><b>' + esc(x.n) + '</b>' + (showWhy && x.why ? '<span class="why">' + esc(x.why) + '</span>' : '<span>' + kg(last[0]) + ' kg × ' + last[1] + ' · 1RM ~' + Math.round(x.e[x.e.length - 1]) + ' kg</span>') + '</div>' +
-      spark(x.e, x.trend) + '<div class="val"><span class="chg ' + x.trend + '">' + (x.trend === 'up' ? pct(x.change) : pct(x.recent)) + '</span><span class="sub" style="display:block;font-size:10px">' + (x.trend === 'up' ? 'za blok' : 'posledne') + '</span></div></button>';
+    var p = x.trend === 'up' ? x.change : x.recent;
+    var arrow = x.trend === 'up' ? '↑' : x.trend === 'down' ? '↓' : '→';
+    return '<button class="ex" data-a="ex" data-n="' + esc(x.n) + '"><div class="nm"><b>' + esc(x.n) + '</b>' +
+      (showWhy && x.why ? '<span class="why">' + esc(x.why) + '</span>' : '<span>' + kg(last[0]) + ' kg × ' + last[1] + ' · 1RM ~' + Math.round(x.e[x.e.length - 1]) + ' kg</span>') + weeks(x) + '</div>' +
+      '<div class="val"><span class="delta ' + x.trend + '">' + arrow + ' ' + pct(p).replace(/^[+−±]/, '') + '</span><span class="sub" style="display:block;font-size:10px;margin-top:3px">' + (x.trend === 'up' ? 'za blok' : 'oproti minule') + '</span></div></button>';
   }
 
   function prehlad() {
