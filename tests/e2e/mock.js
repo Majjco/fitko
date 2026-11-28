@@ -71,6 +71,16 @@ function createMock({ failCol, title, weights, photos, version } = {}) {
       });
       return { ok: true, week, created: false, results };
     }
+    // klientske zápisy: cvik, súhrn tréningu, ranná váha
+    if (b.weight) return { ok: true };
+    if (b.session) return { ok: true, row: 1 };
+    if (b.fields && b.week && !b.op) {
+      const ri = findDayRow(m.grid, b.week, b.day);
+      if (m.grid[ri][b.col - 1] !== b.name) return { ok: false, error: 'Cvik sa zmenil', conflict: true };
+      const off = { sets: 5, weight: 6, rpe: 7, note: 8 };
+      for (const k of Object.keys(b.fields)) m.grid[ri][b.col - 1 + off[k]] = b.fields[k];
+      return { ok: true, row: ri + 1 };
+    }
     if (b.op === 'plan') {
       const ri = findDayRow(m.grid, b.week, b.day);
       const off = { sets: 1, weight: 2, rpe: 3, note: 4 };

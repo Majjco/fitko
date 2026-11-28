@@ -34,6 +34,7 @@ const days = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return i
   const cardA = await page.textContent('.ccard[data-a=open]:has-text("Marián")');
   assert(/klesá|klesajú/.test(cardA) && /nová|nové/.test(cardA), 'karta: pokles a nové poznámky');
   assert(cardA.includes('84,2'), 'karta: ranná váha');
+  assert((await page.textContent('.app-version')).includes('verzia 17'), 'panel ukazuje verziu 17');
   if (OUT) await page.screenshot({ path: `${OUT}/panel-clients.png` });
 
   // 3) panel klienta A
@@ -74,6 +75,13 @@ const days = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return i
   await page.waitForTimeout(100);
   assert((await page.textContent('#bar')).includes('4 zmeny'), 'lišta: 4 zmeny (úprava, vynechanie, nový cvik, návrh deadliftu)');
   if (OUT) await page.screenshot({ path: `${OUT}/panel-draft.png`, fullPage: true });
+
+  // 4b) Zahodiť sa pýta slovenským oknom v paneli – „Pokračovať v úpravách“ nič nezmaže
+  await page.click('#bar [data-a=discard]');
+  await page.waitForSelector('.modal');
+  assert((await page.textContent('.modal')).includes('Pokračovať v úpravách'), 'potvrdenie v paneli po slovensky');
+  await page.click('.modal [data-m="0"]');
+  assert(await page.isVisible('th.draft'), 'po „Pokračovať“ týždeň ostal');
 
   // 5) obnovenie stránky zachová rozpracovaný týždeň aj otvoreného klienta
   await page.reload();
