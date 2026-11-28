@@ -90,7 +90,7 @@ function assert(c, msg) { if (!c) throw new Error('FAIL: ' + msg); console.log('
   await page.waitForSelector('.sheet');
   assert(mock.posts.some((p) => p.fields && p.name === 'LATERAL RAISE' && p.fields.sets === '3x13'), 'lateral raise 3x13');
   const sum = await page.textContent('.sheet');
-  assert(sum.includes('Tréning') && sum.includes('Nový rekord: Bench press'), 'súhrn s rekordom');
+  assert(sum.includes('Tréning') && (await page.textContent('.sheet .prc')).includes('Bench press'), 'súhrn s rekordom');
   assert(!/objem tréningu/i.test(sum), 'súhrn bez celkového objemu');
   if (OUT) await page.screenshot({ path: `${OUT}/v19-summary.png` });
   await page.click('.sheet [data-action=rpe][data-value="8"]');
@@ -122,7 +122,7 @@ function assert(c, msg) { if (!c) throw new Error('FAIL: ' + msg); console.log('
   await page.click('[data-action=tab][data-tab=today]');
   await page.click('[data-action=settings]');
   assert(await page.isVisible('[data-action=copy-coach]'), 'nastavenia: odkaz pre trénera');
-  assert((await page.textContent('.app-version')).includes('21'), 'verzia 21');
+  assert((await page.textContent('.app-version')).includes('22'), 'verzia 22');
   // téma Matrix
   await page.click('[data-action=theme][data-theme=matrix]');
   assert(await page.evaluate(() => document.documentElement.dataset.theme) === 'matrix', 'téma Matrix zapnutá');

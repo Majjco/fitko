@@ -535,3 +535,23 @@ body.sheet-open { overflow: hidden; }
 .swatch.ember::before { content: "EMBER"; font-family: "Barlow Condensed", sans-serif; font-style: italic; font-size: 28px; background: linear-gradient(120deg, #ff7a2f, #ff2d6f); -webkit-background-clip: text; background-clip: text; }
 .swatch.ice { background: #070b14; color: transparent; }
 .swatch.ice::before { content: "ICE"; font-family: "Barlow Condensed", sans-serif; font-style: italic; font-size: 30px; background: linear-gradient(120deg, #45e3ff, #8a6bff); -webkit-background-clip: text; background-clip: text; }
+
+/* ---------- v22: jednoduchosť (Dnes, Týždeň, tréning) ---------- */
+.quicklink { display: flex; align-items: center; justify-content: center; gap: 6px; }
+.quicklink svg { width: 15px; height: 15px; }
+.quicklink.left { justify-content: flex-start; padding: 2px 2px; color: var(--muted); }
+.tip { align-items: center; }
+.tip .tt b { margin: 0; }
+.lastline { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; margin: 8px 2px 12px; font-size: 14px; }
+.lastline span { color: var(--muted); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
+.lastline b { font-weight: 700; }
+.lastline em { flex-basis: 100%; color: var(--muted); font-size: 13px; }
+.rpe-row button.plan { box-shadow: inset 0 0 0 1.5px var(--a1-line); }
+.rpe-row button.plan.on { box-shadow: none; }
+.prc { justify-content: flex-start; }
+.prc > div { flex: 1; min-width: 0; }
+.prc .num { display: block; font-size: 28px; opacity: 1; line-height: 1.05; }
+.prc .tchip { background: rgba(0, 0, 0, .14); color: inherit; font-size: 13px; font-weight: 800; padding: 4px 10px; border-radius: 99px; white-space: nowrap; opacity: 1; }
+.wo-bar .clock:empty { display: none; }
+.wo-bar .steps { flex: 1; min-width: 0; }
+.wo-bar .clock { margin-left: 0; font-size: 20px; }
