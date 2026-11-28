@@ -32,7 +32,8 @@
     if (!s) return null;
     if (/^ok\.?$/i.test(s)) return { ok: true };
     const sets = [];
-    let rest = s.replace(/(\d+)\s*[x×]\s*(\d+)(?:\s*[-–]\s*(\d+))?/gi, (_, n, a, b) => {
+    // „~“ / „cca“ pred opakovaniami = približne (tréner píše napr. „2x~8“)
+    let rest = s.replace(/(\d+)\s*[x×]\s*(?:~|cca\.?)?\s*(\d+)(?:\s*[-–]\s*~?\s*(\d+))?/gi, (_, n, a, b) => {
       const min = +a, max = b ? +b : +a;
       for (let i = 0; i < +n; i++) sets.push({ min: Math.min(min, max), max: Math.max(min, max) });
       return ' ';
@@ -43,7 +44,7 @@
       return ' ';
     });
     if (!sets.length || sets.length > 20) return null;
-    const extra = rest.replace(/[+,;]/g, ' ').replace(/\s+/g, ' ').replace(/^[\s/]+$/, '').trim();
+    const extra = rest.replace(/[+,;~]/g, ' ').replace(/\s+/g, ' ').replace(/^[\s/]+$/, '').trim();
     return { sets, extra };
   }
 

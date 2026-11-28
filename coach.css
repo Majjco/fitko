@@ -27,8 +27,16 @@ button.ccard:hover { border-color: var(--accent); }
 .ccard-stats { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 13px; color: var(--muted); }
 .ccard-stats b { color: var(--text); font-size: 15px; }
 .ccard-actions { display: flex; gap: 8px; }
-.add-client { border-style: dashed; background: transparent; color: var(--muted); }
-.add-client b { color: var(--text); }
+.add-client { border-style: dashed; background: transparent; color: var(--muted); place-content: center; justify-items: center; text-align: center; gap: 4px; min-height: 150px; cursor: pointer; }
+.add-client:hover { border-color: var(--accent); color: var(--text); }
+.add-client .plus { width: 40px; height: 40px; border-radius: 50%; background: var(--surface-2); color: var(--accent); display: grid; place-items: center; font-size: 24px; font-weight: 800; }
+.add-client b { color: var(--text); font-size: 16px; }
+.steps { margin: 0; padding-left: 20px; display: grid; gap: 8px; color: var(--text); font-size: 15px; }
+.addform { display: flex; gap: 8px; }
+.addform input { flex: 1; min-width: 0; background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 12px; color: var(--text); font-size: 14px; outline: none; }
+.addform input:focus { border-color: var(--accent); }
+.addform .btn.small { min-height: 46px; }
+.coach-page .login .card { display: grid; gap: 14px; }
 .flags { display: flex; flex-wrap: wrap; gap: 6px; }
 .flag { font-size: 12px; font-weight: 700; padding: 3px 9px; border-radius: 99px; background: var(--surface-2); color: var(--muted); }
 .flag.up { background: var(--up-bg); color: var(--up); }
@@ -56,11 +64,19 @@ button.tile:hover { border-color: var(--accent); }
 
 /* ----- Mriežka ----- */
 .toolbar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
-.toolbar .legend { flex: 1; min-width: 240px; font-size: 12px; color: var(--muted); }
+.toolbar .legend { flex: 1; min-width: 240px; font-size: 12px; color: var(--muted); display: grid; gap: 6px; }
+.plan-hint { font-size: 14px; color: var(--text); background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 10px; padding: 8px 12px; }
+.plan-hint b { color: var(--accent); }
+.toolbar { align-items: flex-end; }
+.add-week + .add-week { margin-left: -4px; }
 .toolbar .legend b { color: var(--text); }
 .add-week { width: auto; flex: none; min-height: 44px; font-size: 15px; }
 .gridwrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; -webkit-overflow-scrolling: touch; }
-table.g { border-collapse: separate; border-spacing: 0; min-width: 100%; }
+table.g { border-collapse: separate; border-spacing: 0; width: max-content; }
+.g th.wk, .g td.cell { width: 150px; min-width: 150px; max-width: 150px; }
+.g th.wk { white-space: normal; }
+.g th.wk .link { font-size: 12px; }
+.cell .w, .cell .s, .cell .v { overflow-wrap: break-word; }
 .g th, .g td { border-bottom: 1px solid var(--line); padding: 0; vertical-align: top; text-align: left; }
 .g thead th { background: var(--surface); padding: 10px 12px; font-size: 12px; color: var(--muted); font-weight: 600; white-space: nowrap; }
 .g thead th b { display: block; color: var(--text); font-size: 15px; font-weight: 800; }
@@ -74,26 +90,27 @@ table.g { border-collapse: separate; border-spacing: 0; min-width: 100%; }
 .trend.up { color: var(--up); background: var(--up-bg); } .trend.down { color: var(--down); background: var(--down-bg); } .trend.same { color: var(--muted); background: var(--surface-2); }
 .dayrow th, .dayrow td { background: var(--surface-2); }
 .dayrow th { padding: 7px 12px; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
-.g td.cell { min-width: 124px; padding: 9px 26px 9px 12px; position: relative; }
+.g td.cell { padding: 9px 12px; position: relative; }
 .cell .w { display: block; font-weight: 800; font-size: 15px; }
 .cell .s { display: block; font-size: 12px; color: var(--muted); }
-.cell .v, .dcell .v { display: block; font-size: 12px; color: var(--muted); white-space: nowrap; margin-top: 2px; }
+.cell .v, .dcell .v { display: block; font-size: 12px; color: var(--muted); margin-top: 2px; }
 .cell .v b, .dcell .v b { color: var(--text); font-weight: 700; }
 .p { font-weight: 800; }
 .p.up { color: var(--up); } .p.down { color: var(--down); }
 .cell.up .w { color: var(--up); } .cell.down .w { color: var(--down); }
-.cell.plan .cellbtn { display: block; text-align: left; width: 100%; color: var(--muted); opacity: .8; font-style: italic; border-radius: 8px; margin: -4px -6px; padding: 4px 6px; }
+.cell.plan .cellbtn { display: block; box-sizing: border-box; width: 136px; text-align: left; color: var(--muted); opacity: .8; font-style: italic; border-radius: 8px; margin: -4px -6px; padding: 4px 6px; }
 .cell.plan .cellbtn:hover { background: var(--surface-2); opacity: 1; }
 .cell.plan .w { font-weight: 600; }
 .cell.empty { background: repeating-linear-gradient(135deg, transparent 0 6px, rgba(255,255,255,.025) 6px 7px); }
-.notebtn { position: absolute; top: 7px; right: 6px; width: 18px; height: 18px; border-radius: 5px; font-size: 11px; font-weight: 800; display: grid; place-items: center; }
-.notebtn.client { background: var(--warn-bg); color: var(--warn); }
-.notebtn.coach { background: var(--surface-2); color: var(--muted); top: 29px; }
+.nts { display: inline-flex; gap: 4px; margin-left: 6px; vertical-align: 2px; font-style: normal; }
+.notebtn { cursor: pointer; width: 18px; height: 18px; border-radius: 5px; font-size: 11px; font-weight: 800; display: inline-grid; place-items: center; }
+.notebtn.nb-client { background: var(--warn-bg); color: var(--warn); }
+.notebtn.nb-coach { background: var(--surface-2); color: var(--muted); }
 tr.hl > th, tr.hl > td { background-color: var(--warn-bg); }
 tr.dim { opacity: .35; }
 
 /* ----- Nový týždeň (posledný stĺpec) ----- */
-.g .draft { background: var(--draft); border-left: 2px solid var(--accent); min-width: 200px; }
+.g .draft { background: var(--draft); border-left: 2px solid var(--accent); width: 220px; min-width: 220px; }
 .g thead th.draft { background: var(--draft); white-space: normal; }
 .draft-head { display: grid; gap: 6px; }
 .draft-head b { color: var(--accent) !important; }
@@ -161,5 +178,6 @@ tr.dim { opacity: .35; }
 @media (max-width: 820px) {
   .snap { grid-template-columns: minmax(0, 1fr); }
   .g .exc { min-width: 160px; max-width: 180px; }
-  .g td.cell { min-width: 112px; }
+  .g th.wk, .g td.cell { width: 128px; min-width: 128px; max-width: 128px; }
+  .cell.plan .cellbtn { width: 114px; }
 }

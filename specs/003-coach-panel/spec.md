@@ -144,6 +144,12 @@ v tabuľke nový týždeň s posunutými dátumami a hodnotami z panelu.
    tréner vidí, čo sa nezapísalo, a môže to odoslať znova; nič sa nezapíše dvakrát.
 6. **Given** tréner chce zmeniť už odoslaný týždeň, ktorý klient ešte necvičil, **When**
    klikne na bunku, **Then** môže hodnoty upraviť priamo (uloží sa hneď).
+7. **Given** posledný týždeň je naplánovaný, ale klient ho ešte necvičil (tréner ho napr.
+   skopíroval v Exceli), **When** tréner otvorí klienta, **Then** panel to jasne povie a hlavná
+   akcia je „Upraviť T{n}“: stĺpec týždňa sa zmení na políčka s aktuálnym plánom (prepínač
+   „Aktuálny plán / Návrh podľa výkonov“), tréner upraví čo treba a „Uložiť a poslať klientovi“
+   zapíše zmeny do toho istého týždňa (nevznikne nový). „Pridať týždeň n+1“ ostáva ako druhá
+   možnosť. *(doplnené po spätnej väzbe 2026-11-28)*
 
 ---
 
@@ -201,7 +207,12 @@ rozpracovaného týždňa.
   pridať cvik do voľného miesta dňa.
 - **FR-008**: „Odoslať klientovi“ MUSÍ zapísať týždeň do tabuľky jednou akciou (dátumy +7 dní,
   len PLANNED), s kontrolou zmien a opakovaním neúspešných častí (FR-007–009 spec 002).
-- **FR-009**: Bunky budúceho, ešte neodcvičeného týždňa MUSIA ísť upraviť priamo.
+- **FR-009**: Bunky budúceho, ešte neodcvičeného týždňa MUSIA ísť upraviť priamo, jednotlivo
+  aj celý týždeň naraz („Upraviť T{n}“, US4 scenár 7).
+- **FR-012**: „Pridať klienta“ MUSÍ byť klikateľné: krátky návod a políčko na vloženie odkazu
+  od klienta.
+- **FR-013**: Stĺpce týždňov MAJÚ pevnú šírku (bez medzier pri širokej obrazovke).
+- **FR-014**: Série s približným počtom opakovaní (`2x~8`) sa MUSIA počítať ako 2×8.
 - **FR-010**: Detail cviku (graf váhy a objemu aj zo starších blokov, poznámky) a detail tela
   (váha, fotky) sa MUSIA otvárať bez opustenia plochy.
 - **FR-011**: Klientska apka sa nemení.

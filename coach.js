@@ -443,9 +443,10 @@
         toast(`Týždeň ${out.week} je v tabuľke, ${failed.length} ${plural(failed.length, 'cvik sa nezapísal', 'cviky sa nezapísali', 'cvikov sa nezapísalo')}`);
         return;
       }
+      const wasEdit = dr.edit;
       putDraft(c, null);
       await loadClient(c, true);
-      toast(`Týždeň ${out.week} je u klienta ✓`);
+      toast(wasEdit ? `Týždeň ${out.week} upravený – klient ho vidí ✓` : `Týždeň ${out.week} je u klienta ✓`);
     } catch (err) {
       toast('Nepodarilo sa odoslať: ' + err.message);
     } finally {
@@ -524,8 +525,34 @@
     }
   }
 
+  function addClientForm() {
+    return `<ol class="steps">
+        <li>Klient v apke Fitko otvorí <b>Nastavenia</b> a klikne <b>„Skopírovať odkaz pre trénera“</b>.</li>
+        <li>Pošle ti odkaz (správa, e-mail…).</li>
+        <li>Odkaz otvoríš – alebo ho vložíš sem:</li>
+      </ol>
+      <form id="add-form" class="addform" autocomplete="off">
+        <input id="add-link" placeholder="https://…/trener.html#s=…" aria-label="Odkaz od klienta">
+        <button class="btn small" type="submit">Pridať</button>
+      </form>
+      <p class="hint">Na prihlásenie použiješ svoje trénerské meno a heslo – rovnaké ako pri ostatných klientoch.</p>`;
+  }
   function renderNoClients() {
-    return `<div class="login"><h1>Fitko · Tréner</h1><p>Zatiaľ tu nemáš žiadneho klienta. Klient ti pošle odkaz zo svojej apky Fitko (<b>Nastavenia → Skopírovať odkaz pre trénera</b>). Keď ho otvoríš, klient sa pridá sem.</p></div>`;
+    return `<div class="login"><h1>Fitko · Tréner</h1><p>Zatiaľ tu nemáš žiadneho klienta.</p><div class="card">${addClientForm()}</div></div>`;
+  }
+  function addClientFromLink(raw) {
+    const s = String(raw || '').trim();
+    let url = s;
+    const m = s.match(/#s=([^&\s]+)/);
+    if (m) { try { url = decodeURIComponent(escape(atob(m[1]))); } catch (_) { url = ''; } }
+    if (!/^https:\/\/script\.google\.com\/.+\/exec$/.test(url)) { toast('Toto nevyzerá ako odkaz od klienta z apky Fitko'); return false; }
+    if (state.clients.some((x) => x.scriptUrl === url)) { toast('Tento klient už v zozname je'); return true; }
+    const c = { id: idFor(url), scriptUrl: url };
+    state.clients.push(c);
+    save(KEY.clients, state.clients);
+    toast('Klient pridaný');
+    if (state.cred.pass) loadClient(c);
+    return true;
   }
 
   function renderLogin() {
@@ -587,7 +614,7 @@
         <button class="icon-btn" data-a="logout" aria-label="Odhlásiť">${ICON.logout}</button>
       </div>
       <div class="clients">${cards}
-        <div class="ccard add-client"><b>+ Pridať klienta</b><span>Klient ti pošle odkaz zo svojej apky Fitko (Nastavenia → Skopírovať odkaz pre trénera). Keď ho otvoríš, pribudne sem.</span></div>
+        <button class="ccard add-client" data-a="add-client"><span class="plus">+</span><b>Pridať klienta</b><span>Vlož odkaz, ktorý ti klient poslal z apky</span></button>
       </div>`;
   }
 
@@ -641,8 +668,19 @@
 
     const lp = lastPlannedIdx(d);
     const nextN = lp >= 0 ? expectedTarget(d, lp) : null;
-    const tb = `<div class="toolbar"><span class="legend">V bunke: <b>váha</b> · série × opakovania · RPE · <b>objem cviku</b> (série × opak. × kg) a zmena oproti minulému týždňu. Svetlé = plán – klikni a uprav.</span>
-      ${!dr && lp >= 0 ? `<button class="btn add-week" data-a="add-week">+ Pridať týždeň ${nextN}</button>` : ''}</div>`;
+    const lpW = lp >= 0 ? d.weeks[lp] : null;
+    const unstarted = lpW && !lpW.days.some((x) => x.exercises.some((e) => hasAny(e.done)));
+    const who = esc(((d.title || '').trim().split(/\s+/)[0]) || 'klient');
+    let actions = '';
+    if (!dr && lpW) {
+      actions = unstarted
+        ? `<button class="btn add-week" data-a="edit-week" data-w="${lpW.n}">Upraviť T${lpW.n}</button><button class="btn ghost add-week" data-a="add-week">+ Pridať týždeň ${nextN}</button>`
+        : `<button class="btn add-week" data-a="add-week">+ Pridať týždeň ${nextN}</button>`;
+    }
+    const tb = `<div class="toolbar"><div class="legend">
+        ${!dr && unstarted ? `<div class="plan-hint"><b>T${lpW.n} je naplánovaný, ${who} ho ešte necvičil.</b> Uprav ho tlačidlom „Upraviť T${lpW.n}“ (všetky cviky naraz, aj s návrhom podľa výkonov) alebo klikni na jednu bunku. Týždeň ${nextN} pridáš, keď bude T${lpW.n} za vami.</div>` : ''}
+        <span>V bunke: <b>váha</b> · série × opakovania · RPE · <b>objem cviku</b> (série × opak. × kg) a zmena oproti minulému týždňu. Svetlé = plán, ktorý ešte necvičil.</span></div>
+      ${actions}</div>`;
 
     return top + snap + ins + (dr ? draftBanners(d, dr) : '') + tb + (model.rows.length ? `<div class="gridwrap">${renderGrid(c, d, model, g, dr)}</div>` : '<div class="empty">V tabuľke zatiaľ nie je žiadny plán.</div>');
   }
@@ -660,7 +698,7 @@
         const e = day && day.exercises.find((x) => x.col === col);
         return `Deň ${dayN} · ${nice(e ? e.name : '')}`;
       };
-      out += `<div class="banner err"><div><b>Týždeň ${dr.target} je v tabuľke, ale tieto cviky sa nezapísali:</b><ul class="failed">${dr.failed.map((f) => `<li>${esc(nameOf(f.key))} – ${esc(f.error || 'chyba')}</li>`).join('')}</ul></div></div>`;
+      out += `<div class="banner err"><div><b>${dr.edit ? 'Tieto zmeny sa nezapísali:' : `Týždeň ${dr.target} je v tabuľke, ale tieto cviky sa nezapísali:`}</b><ul class="failed">${dr.failed.map((f) => `<li>${esc(nameOf(f.key))} – ${esc(f.error || 'chyba')}</li>`).join('')}</ul></div></div>`;
     }
     return out;
   }
@@ -670,11 +708,12 @@
     if (!cell) return '<td class="cell empty"></td>';
     const e = cell.e;
     let notes = '';
-    if (e.done.note) notes += `<button class="notebtn client" data-a="note" data-r="${esc(r.key)}" data-w="${col.w.n}" aria-label="Poznámka klienta">!</button>`;
-    if (e.planned.note) notes += `<button class="notebtn coach" data-a="note" data-r="${esc(r.key)}" data-w="${col.w.n}" aria-label="Poznámka trénera">T</button>`;
+    // span s role=button: v neodcvičenej bunke je značka vnútri tlačidla bunky (button v buttone nejde)
+    if (e.done.note) notes += `<span class="notebtn nb-client" role="button" tabindex="0" data-a="note" data-r="${esc(r.key)}" data-w="${col.w.n}" aria-label="Poznámka klienta">!</span>`;
+    if (e.planned.note) notes += `<span class="notebtn nb-coach" role="button" tabindex="0" data-a="note" data-r="${esc(r.key)}" data-w="${col.w.n}" aria-label="Poznámka trénera">T</span>`;
     if (!hasAny(e.done)) {
-      return `<td class="cell plan">${notes}<button class="cellbtn" data-a="cell" data-r="${esc(r.key)}" data-w="${col.w.n}" aria-label="Upraviť plán">
-        <span class="w">${esc(prettyNum(e.planned.weight) || '–')}${isNumW(e.planned.weight) ? ' kg' : ''}</span>
+      return `<td class="cell plan"><button class="cellbtn" data-a="cell" data-r="${esc(r.key)}" data-w="${col.w.n}" aria-label="Upraviť plán">
+        <span class="w">${esc(prettyNum(e.planned.weight) || '–')}${isNumW(e.planned.weight) ? ' kg' : ''}${notes ? `<span class="nts">${notes}</span>` : ''}</span>
         <span class="s">plán ${esc(prettySets(e.planned.sets))}${e.planned.rpe ? ' · RPE ' + esc(prettyNum(e.planned.rpe)) : ''}</span></button></td>`;
     }
     const v = C.totalKg(C.volume(e.name, e.planned, e.done));
@@ -682,7 +721,7 @@
     const pv = pc && hasAny(pc.e.done) ? C.totalKg(C.volume(pc.e.name, pc.e.planned, pc.e.done)) : 0;
     const cls = pv && v ? (v > pv * 1.005 ? 'up' : v < pv * 0.995 ? 'down' : '') : '';
     const vl = v ? `<span class="v">objem <b>${esc(C.formatVolume(v))}</b>${pv ? ` <span class="p ${cls}">${esc(C.formatPct(v / pv - 1))}</span>` : ''}</span>` : '';
-    return `<td class="cell ${cls}">${notes}<span class="w">${esc(prettyNum(e.done.weight) || '–')}${isNumW(e.done.weight) ? ' kg' : ''}</span>
+    return `<td class="cell ${cls}"><span class="w">${esc(prettyNum(e.done.weight) || '–')}${isNumW(e.done.weight) ? ' kg' : ''}${notes ? `<span class="nts">${notes}</span>` : ''}</span>
       <span class="s">${esc(e.done.sets === 'Ok' ? 'Ok' : prettySets(e.done.sets))}${e.done.rpe ? ' · RPE ' + esc(prettyNum(e.done.rpe)) : ''}</span>${vl}</td>`;
   }
 
@@ -714,7 +753,7 @@
     const nv = C.totalKg(C.volume(dRow.e.name, f, f));
     const volLine = nv ? `<span class="v">objem <b>${esc(C.formatVolume(nv))}</b>${lastDone ? ` <span class="p ${nv > lastDone * 1.005 ? 'up' : nv < lastDone * 0.995 ? 'down' : ''}">${esc(C.formatPct(nv / lastDone - 1))}</span> vs. T${dRow.src.week}` : ''}</span>` : '';
     const why = dRow.st.edited ? '<span class="why">upravené tebou</span>'
-      : dr.mode === 'copy' ? `<span class="why">kópia T${dr.from}</span>`
+      : dr.mode === 'copy' ? `<span class="why">${dr.edit ? 'aktuálny plán' : `kópia T${dr.from}`}</span>`
       : `<span class="why ${dRow.s.review ? 'rev' : ''}" title="${esc(dRow.s.reason)}">${dw ? `<span class="d ${dw > 0 ? 'up' : 'down'}">${dw > 0 ? '+' : '−'}${esc(fmtKg(Math.abs(dw)))} kg</span> ` : ''}${esc(shortWhy(dRow, settingsOf(d).pct))}</span>`;
     const inp = (k, cls, label, ph) => `<input id="${id}-${k}" class="${cls} ${String(f[k] || '') !== String(base[k] || '') ? 'chg' : ''}" data-dk="${key}" data-f="${k}" value="${esc(f[k] || '')}" placeholder="${esc(ph)}" aria-label="${esc(label + ' – ' + nice(dRow.e.name))}" autocomplete="off">`;
     return `<td class="draft"><div class="dcell">
@@ -722,12 +761,15 @@
       <div class="dline">${inp('sets', 'sets', 'Série', '3x10')}${inp('rpe', 'rpe', 'RPE', 'RPE')}</div>
       ${inp('note', 'note', 'Poznámka pre klienta', 'poznámka pre klienta')}
       ${volLine}${why}
-      <span class="dacts">${dRow.st.edited ? `<button class="link" data-a="unedit" data-k="${key}">späť na ${dr.mode === 'copy' ? 'kópiu' : 'návrh'}</button>` : ''}<button class="link muted" data-a="skip" data-k="${key}">vynechať</button></span>
+      <span class="dacts">${dRow.st.edited ? `<button class="link" data-a="unedit" data-k="${key}">späť na ${dr.mode === 'copy' ? (dr.edit ? 'plán' : 'kópiu') : 'návrh'}</button>` : ''}<button class="link muted" data-a="skip" data-k="${key}">vynechať</button></span>
     </div></td>`;
   }
 
   function renderGrid(c, d, model, g, dr) {
-    const cols = model.cols;
+    const allCols = model.cols;
+    const cols = dr && dr.edit ? allCols.filter(({ w }) => w.n !== dr.from) : allCols;
+    const lpIdx = lastPlannedIdx(d);
+    const lpUnstarted = lpIdx >= 0 && !d.weeks[lpIdx].days.some((x) => x.exercises.some((e) => hasAny(e.done)));
     const curIdx = currentWeekIdx(d);
     const drows = dr ? draftRows(c, d, dr) : [];
     const dByRow = new Map(drows.map((x) => [x.rowKey, x]));
@@ -735,22 +777,22 @@
     const focusSet = state.focus ? g[state.focus] : null;
     const srcWeek = dr ? d.weeks.find((w) => w.n === dr.from) : null;
     const srcDates = srcWeek ? srcWeek.days.map((x) => x.date).filter(Boolean) : [];
-    const draftRange = srcDates.length ? `${formatDate(isoPlus(srcDates[0], 7), false)} – ${formatDate(isoPlus(srcDates[srcDates.length - 1], 7), false)}` : '';
+    const draftRange = !srcDates.length ? '' : dr && dr.edit ? weekRange(srcWeek) : `${formatDate(isoPlus(srcDates[0], 7), false)} – ${formatDate(isoPlus(srcDates[srcDates.length - 1], 7), false)}`;
     const st = settingsOf(d);
-    const head = `<thead><tr><th class="exc">Cvik</th>${cols.map(({ w, wi }) => `<th class="${wi === curIdx ? 'cur' : ''}"><b>T${w.n}</b>${esc(weekRange(w))}${wi === curIdx ? ' · teraz' : wi > curIdx ? ' · plán' : ''}</th>`).join('')}
-      ${dr ? `<th class="draft"><div class="draft-head"><b>T${target} · nový</b><span>${esc(draftRange)}</span>
-        <div class="seg" role="group" aria-label="Predvyplnenie"><button class="${dr.mode === 'suggest' ? 'on' : ''}" data-a="mode" data-m="suggest">Návrh</button><button class="${dr.mode === 'copy' ? 'on' : ''}" data-a="mode" data-m="copy">Kópia T${dr.from}</button></div>
+    const head = `<thead><tr><th class="exc">Cvik</th>${cols.map(({ w, wi }) => `<th class="wk ${wi === curIdx ? 'cur' : ''}"><b>T${w.n}</b>${esc(weekRange(w))}${wi === curIdx ? ' · teraz' : wi > curIdx ? ' · naplánovaný' : ''}${!dr && wi === lpIdx && lpUnstarted ? ` <button class="link" data-a="edit-week" data-w="${w.n}">upraviť</button>` : ''}</th>`).join('')}
+      ${dr ? `<th class="draft"><div class="draft-head"><b>T${target} · ${dr.edit ? 'úprava' : 'nový'}</b><span>${esc(draftRange)}</span>
+        <div class="seg" role="group" aria-label="Predvyplnenie"><button class="${dr.mode === 'copy' ? 'on' : ''}" data-a="mode" data-m="copy">${dr.edit ? 'Aktuálny plán' : `Kópia T${dr.from}`}</button><button class="${dr.mode === 'suggest' ? 'on' : ''}" data-a="mode" data-m="suggest">${dr.edit ? 'Návrh podľa výkonov' : 'Návrh'}</button></div>
         ${dr.mode === 'suggest' ? `<label class="pct">cieľ objemu <select id="dr-pct" data-pct="1">${PCT_OPTIONS.map((v) => `<option value="${v}" ${Number(st.pct) === v ? 'selected' : ''}>+${String(v).replace('.', ',')} %</option>`).join('')}</select></label>` : ''}
       </div></th>` : ''}</tr></thead>`;
     const nCols = cols.length + 1 + (dr ? 1 : 0);
     const body = model.days.map((dayN) => {
       const rows = model.rows.filter((r) => r.day === dayN);
-      const latest = rows.map((r) => r.cells[cols[cols.length - 1].w.n]).find(Boolean);
+      const latest = rows.map((r) => r.cells[allCols[allCols.length - 1].w.n]).find(Boolean);
       const dayDate = latest && latest.day.date;
       let out = `<tr class="dayrow"><th class="exc">Deň ${dayN}${dayDate ? ` · ${DAY_NAMES[dateOf(dayDate).getDay()]}` : ''}</th><td colspan="${nCols - 1}"></td></tr>`;
       out += rows.map((r) => {
         const cls = focusSet ? (focusSet.includes(r.key) ? 'hl' : 'dim') : '';
-        const latestCell = cols.slice().reverse().map(({ w }) => r.cells[w.n]).find(Boolean);
+        const latestCell = allCols.slice().reverse().map(({ w }) => r.cells[w.n]).find(Boolean);
         const t = r.trend;
         const trendHtml = t.kind === 'none' ? '' : `<span class="trend ${t.kind}" title="${esc(t.why)}">${t.kind === 'up' ? '↑ ide hore' : t.kind === 'down' ? '↓ klesá' : '→ stagnuje'}</span>`;
         const dRow = dByRow.get(r.key);
@@ -778,7 +820,7 @@
 
   function barText(c, d, dr) {
     const n = draftChanges(draftRows(c, d, dr), dr);
-    return `${n} ${plural(n, 'zmena', 'zmeny', 'zmien')} oproti T${dr.from} · uložené v tomto prehliadači`;
+    return `${n} ${plural(n, 'zmena', 'zmeny', 'zmien')} ${dr.edit ? 'oproti aktuálnemu plánu' : `oproti T${dr.from}`} · uložené v tomto prehliadači`;
   }
   function renderBar() {
     let bar = document.getElementById('bar');
@@ -791,15 +833,20 @@
     const target = dr.target || expectedTarget(d, d.weeks.findIndex((w) => w.n === dr.from));
     const failed = dr.failed && dr.failed.length;
     const busy = state.busy.send;
-    bar.innerHTML = `<div class="bar-in"><div class="info"><b>${failed ? `Týždeň ${target}: ${dr.failed.length} ${plural(dr.failed.length, 'cvik čaká', 'cviky čakajú', 'cvikov čaká')} na odoslanie` : `Týždeň ${target} je rozpracovaný`}</b><span id="bar-sub">${esc(barText(c, d, dr))}</span></div>
+    bar.innerHTML = `<div class="bar-in"><div class="info"><b>${failed ? `Týždeň ${target}: ${dr.failed.length} ${plural(dr.failed.length, 'cvik čaká', 'cviky čakajú', 'cvikov čaká')} na odoslanie` : dr.edit ? `Upravuješ týždeň ${target}` : `Týždeň ${target} je rozpracovaný`}</b><span id="bar-sub">${esc(barText(c, d, dr))}</span></div>
       <button class="btn ghost" data-a="discard" ${busy ? 'disabled' : ''}>Zahodiť</button>
-      <button class="btn" data-a="${failed ? 'retry-send' : 'send'}" ${busy || !d.settings ? 'disabled' : ''}>${busy ? 'Odosielam…' : failed ? 'Odoslať chýbajúce' : 'Odoslať klientovi'}</button></div>`;
+      <button class="btn" data-a="${failed ? 'retry-send' : 'send'}" ${busy || !d.settings ? 'disabled' : ''}>${busy ? 'Odosielam…' : failed ? 'Odoslať chýbajúce' : dr.edit ? 'Uložiť a poslať klientovi' : 'Odoslať klientovi'}</button></div>`;
   }
 
   // ----- Vrstva: poznámka, úprava bunky, detail cviku, telo -----
   const rowByKey = (d, key) => buildModel(d).rows.find((r) => r.key === key);
 
   function renderLayer() {
+    if (state.drawer && state.drawer.kind === 'add') {
+      return `<div class="drawer-bg" data-a="close-drawer"></div><aside class="drawer" role="dialog" aria-label="Pridať klienta">
+        <div class="drawer-head"><h2>Pridať klienta</h2><button class="icon-btn" data-a="close-drawer" aria-label="Zavrieť">${ICON.close}</button></div>
+        ${addClientForm()}</aside>`;
+    }
     const c = client();
     const d = c && dataOf(c.id);
     if (!d || state.view !== 'client' || !state.cred.pass) return '';
@@ -926,6 +973,11 @@
     putDraft(c, dr);
   }
 
+  document.addEventListener('submit', (e) => {
+    if (e.target.id !== 'add-form') return;
+    e.preventDefault();
+    if (addClientFromLink(document.getElementById('add-link').value)) { state.drawer = null; render(); }
+  });
   app.addEventListener('submit', async (e) => {
     if (e.target.id !== 'login-form') return;
     e.preventDefault();
@@ -968,6 +1020,7 @@
     else if (el.dataset.step != null && c) saveSetting(c, 'krok:' + el.dataset.step, Number(el.value));
   });
   document.addEventListener('keydown', (e) => {
+    if ((e.key === 'Enter' || e.key === ' ') && e.target.classList && e.target.classList.contains('notebtn')) { e.preventDefault(); handle('note', e.target); return; }
     if (e.key === 'Escape' && (state.pop || state.drawer)) { state.pop = null; state.drawer = null; render(); }
     if (e.key === 'Enter' && e.target.closest && e.target.closest('.pop.edit')) { e.preventDefault(); handle('cell-save'); }
   });
@@ -1027,6 +1080,16 @@
       case 'ex': state.drawer = { kind: 'ex', key: t.dataset.r }; state.pop = null; render(); loadHistory(c); break;
       case 'body': state.drawer = { kind: 'body' }; state.pop = null; render(); break;
       case 'close-drawer': state.drawer = null; render(); break;
+      case 'add-client': state.drawer = { kind: 'add' }; render(); { const el = document.getElementById('add-link'); if (el) el.focus(); } break;
+      case 'edit-week': {
+        const d = dataOf(c.id);
+        const n = Number(t.dataset.w);
+        putDraft(c, { sheet: d.sheet, from: n, target: n, edit: true, mode: 'copy', rows: {}, extra: [] });
+        render();
+        const gw = app.querySelector('.gridwrap');
+        if (gw) gw.scrollLeft = gw.scrollWidth;
+        break;
+      }
       case 'add-week': {
         const d = dataOf(c.id);
         const lp = lastPlannedIdx(d);
