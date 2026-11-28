@@ -238,7 +238,7 @@ textarea.note:focus, input.note:focus { border-color: var(--a1); }
 .delta .up { color: var(--ok); font-weight: 800; } .delta .down { color: var(--down); font-weight: 800; }
 
 /* pauza */
-.pause { position: fixed; inset: 0; z-index: 60; background: rgba(10, 12, 15, .93); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); display: grid; place-items: center; text-align: center; padding: calc(var(--safe-top) + 24px) 24px calc(var(--safe-bottom) + 24px); }
+.pause { position: fixed; inset: 0; z-index: 60; background: color-mix(in srgb, var(--bg) 93%, transparent); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); display: grid; place-items: center; text-align: center; padding: calc(var(--safe-top) + 24px) 24px calc(var(--safe-bottom) + 24px); }
 .rring { position: relative; width: min(260px, 70vw); aspect-ratio: 1; margin: 10px auto 18px; }
 .rring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
 .rring .bgc { fill: none; stroke: var(--surface-2); stroke-width: 12; }
@@ -451,3 +451,21 @@ body.sheet-open { overflow: hidden; }
 :root[data-theme="matrix"] .steps button { border-radius: 6px; }
 :root[data-theme="matrix"] .steps button.cur { background: var(--a1); box-shadow: 0 0 14px rgba(0, 255, 65, .5); }
 .row2 .btn + .btn { margin-top: 0; }
+
+/* ---------- témy Ember a Ice (v20) ---------- */
+:root[data-theme="ember"] {
+  --bg: #0d0908; --bg2: #070504; --surface: #1a1311; --surface-2: #241a17; --line: #33251f;
+  --muted: #a39088; --dim: #6e5c55;
+  --a1: #ff7a2f; --a2: #ff2d6f; --ink: #1a0600; --glow: rgba(255, 106, 47, .38);
+  --a1-soft: rgba(255, 122, 47, .09); --a1-line: rgba(255, 122, 47, .32); --tabs-bg: rgba(26, 19, 17, .88);
+}
+:root[data-theme="ice"] {
+  --bg: #070b14; --bg2: #04070d; --surface: #0f1726; --surface-2: #162034; --line: #1f2c44;
+  --muted: #8698b8; --dim: #55658a;
+  --a1: #45e3ff; --a2: #8a6bff; --ink: #001018; --glow: rgba(69, 227, 255, .32);
+  --a1-soft: rgba(69, 227, 255, .08); --a1-line: rgba(69, 227, 255, .3); --tabs-bg: rgba(15, 23, 38, .88);
+}
+.swatch.ember { background: #0d0908; color: transparent; }
+.swatch.ember::before { content: "EMBER"; font-family: "Barlow Condensed", sans-serif; font-style: italic; font-size: 28px; background: linear-gradient(120deg, #ff7a2f, #ff2d6f); -webkit-background-clip: text; background-clip: text; }
+.swatch.ice { background: #070b14; color: transparent; }
+.swatch.ice::before { content: "ICE"; font-family: "Barlow Condensed", sans-serif; font-style: italic; font-size: 30px; background: linear-gradient(120deg, #45e3ff, #8a6bff); -webkit-background-clip: text; background-clip: text; }
