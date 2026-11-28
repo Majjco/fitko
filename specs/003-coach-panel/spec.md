@@ -262,3 +262,8 @@ rozpracovaného týždňa.
   (kedy · plán · výkon · objem · 1RM, pohár pri rekorde, poznámky klienta aj trénera).
 - V prehľade ostali kľúčové údaje: karta klienta ukazuje aj dni od tréningu; dlaždica Tréningy
   ďalší deň a posledný tréning; dlaždica Váha dátum váženia.
+- **Všetko na jednej obrazovke (bez rozklikávania)**: v mriežke pri každom cviku zmena sily
+  (hore = za blok, stagnácia/pokles = oproti minulému týždňu), rekord, návrh na ďalší týždeň
+  („pridaj +2,5 kg“, „drž“, „uber −2,5 kg“, „cieľ 3×9“ – rovnaké pravidlá ako spec 002) a dôvod
+  trendu; bunky zafarbené podľa zmeny objemu oproti minulému týždňu, 🏆 pri rekorde a poznámka
+  klienta priamo v bunke. Detail cviku ostáva ako voliteľný.

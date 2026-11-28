@@ -714,6 +714,46 @@
     return out;
   }
 
+  // Vývoj cviku v aktuálnom bloku: zmena sily (1RM), rekordy po týždňoch, návrh na ďalší týždeň.
+  function rowStats(d, r, cols) {
+    const done = cols.map((col) => r.cells[col.w.n]).filter((x) => x && hasAny(x.e.done));
+    const pts = done.map((x) => {
+      const e = x.e;
+      const wp = C.parseWeight(String(e.done.weight).split(/\s+a\s+/)[0]);
+      const kg = wp && wp.lo ? wp.lo : 0;
+      const ds = String(e.done.sets).split(/\s+a\s+/)[0];
+      const ps = C.parseSets(ds);
+      const reps = C.topReps(ps && ps.ok ? String(e.planned.sets).split(/\s+a\s+/)[0] : ds);
+      return { w: x.w.n, x, kg, reps, vol: C.totalKg(C.volume(e.name, e.planned, e.done)), e1: C.e1rm(kg, reps) };
+    });
+    const rec = {};
+    pts.forEach((p, i) => { const q = C.record(pts.slice(0, i).filter((z) => z.kg), p); if (q) rec[p.w] = q; });
+    const withKg = pts.filter((p) => p.e1);
+    const block = withKg.length > 1 ? withKg[withKg.length - 1].e1 / withKg[0].e1 - 1 : null;
+    const lp = pts[pts.length - 1], pp = pts[pts.length - 2];
+    const recentE = lp && pp && lp.e1 && pp.e1 ? lp.e1 / pp.e1 - 1 : null;
+    const recentV = lp && pp && lp.vol && pp.vol ? lp.vol / pp.vol - 1 : null;
+    const best = pts.reduce((m, p) => Math.max(m, p.kg), 0);
+    let tip = null;
+    const last = done[done.length - 1];
+    if (last) {
+      const prev = done[done.length - 2];
+      const sg = C.suggest({ name: last.e.name, planned: last.e.planned, done: last.e.done, prevMissed: prev ? C.missed(prev.e.name, prev.e.planned, prev.e.done) : false, step: stepFor(d, last.e.name), pct: settingsOf(d).pct / 100 });
+      const nw = C.parseWeight(String(sg.fields.weight).split(/\s+a\s+/)[0]);
+      const lw = pts[pts.length - 1].kg;
+      const dw = nw && nw.lo && lw ? Math.round((nw.lo - lw) * 100) / 100 : 0;
+      const target = /cieľ (\d+×\d+) opak/.exec(sg.reason);
+      if (sg.review || sg.rule === 'R0') tip = ['warn', 'skontroluj'];
+      else if (dw > 0) tip = ['up', `pridaj +${fmtKg(dw)} kg`];
+      else if (dw < 0) tip = ['down', `uber −${fmtKg(-dw)} kg`];
+      else if (target) tip = ['up', `cieľ ${target[1]}`];
+      else if (sg.rule === 'R6' || sg.rule === 'R5') tip = ['up', 'pridaj opak.'];
+      else tip = ['same', 'drž'];
+      tip.push(sg.reason);
+    }
+    return { rec, block, recentE, recentV, best, tip };
+  }
+
   function cellHtml(r, col, prevCol) {
     const cell = r.cells[col.w.n];
     if (!cell) return '<td class="cell empty"></td>';
@@ -732,8 +772,9 @@
     const pv = pc && hasAny(pc.e.done) ? C.totalKg(C.volume(pc.e.name, pc.e.planned, pc.e.done)) : 0;
     const cls = pv && v ? (v > pv * 1.005 ? 'up' : v < pv * 0.995 ? 'down' : '') : '';
     const vl = v ? `<span class="v">objem <b>${esc(C.formatVolume(v))}</b>${pv ? ` <span class="p ${cls}">${esc(C.formatPct(v / pv - 1))}</span>` : ''}</span>` : '';
-    return `<td class="cell ${cls}"><span class="w">${esc(prettyNum(e.done.weight) || '–')}${isNumW(e.done.weight) ? ' kg' : ''}${notes ? `<span class="nts">${notes}</span>` : ''}</span>
-      <span class="s">${esc(e.done.sets === 'Ok' ? 'Ok' : prettySets(e.done.sets))}${e.done.rpe ? ' · RPE ' + esc(prettyNum(e.done.rpe)) : ''}</span>${vl}</td>`;
+    const rc = r.stats && r.stats.rec[col.w.n];
+    return `<td class="cell ${cls} ${rc ? 'rec' : ''}"><span class="w">${esc(prettyNum(e.done.weight) || '–')}${isNumW(e.done.weight) ? ' kg' : ''}${rc ? `<span class="trophy" title="rekord: ${esc(C.recordChip(rc))}">🏆</span>` : ''}${notes ? `<span class="nts">${notes}</span>` : ''}</span>
+      <span class="s">${esc(e.done.sets === 'Ok' ? 'Ok' : prettySets(e.done.sets))}${e.done.rpe ? ' · RPE ' + esc(prettyNum(e.done.rpe)) : ''}</span>${vl}${e.done.note ? `<span class="cn">„${esc(e.done.note)}“</span>` : ''}</td>`;
   }
 
   function shortWhy(r, pct) {
@@ -805,10 +846,16 @@
         const cls = focusSet ? (focusSet.includes(r.key) ? 'hl' : 'dim') : '';
         const latestCell = allCols.slice().reverse().map(({ w }) => r.cells[w.n]).find(Boolean);
         const t = r.trend;
-        const trendHtml = t.kind === 'none' ? '' : `<span class="trend ${t.kind}" title="${esc(t.why)}">${t.kind === 'up' ? '↑ hore' : t.kind === 'down' ? '↓ klesá' : '→ stagnuje'}</span>`;
+        r.stats = rowStats(d, r, allCols);
+        const sx = r.stats;
+        // hore = zmena sily za blok; stagnácia / pokles = zmena oproti minulému týždňu
+        const tp = t.kind === 'up' ? sx.block : t.kind === 'down' ? Math.min(0, sx.recentE == null ? 0 : sx.recentE, sx.recentV == null ? 0 : sx.recentV) : sx.recentE;
+        const trendHtml = t.kind === 'none' ? '' : `<span class="trend ${t.kind}" title="${esc(t.why)}">${t.kind === 'up' ? '↑' : t.kind === 'down' ? '↓' : '→'} ${tp != null ? esc(C.formatPct(tp)) : t.kind === 'up' ? 'hore' : t.kind === 'down' ? 'klesá' : 'stagnuje'}</span>`;
         const dRow = dByRow.get(r.key);
         return `<tr class="${cls}"><th class="exc"><button class="exname" data-a="ex" data-r="${esc(r.key)}">${esc(nice(r.name))}</button>
-          <div class="exmeta">${trendHtml}${t.fatigue ? '<span class="trend down" title="RPE rastie pri rovnakej váhe">únava</span>' : ''}<span>${esc(prettySets(latestCell.e.planned.sets))}${latestCell.e.planned.rpe ? ' · RPE ' + esc(prettyNum(latestCell.e.planned.rpe)) : ''}</span></div></th>
+          <div class="exmeta">${trendHtml}${t.fatigue ? '<span class="trend down" title="RPE rastie pri rovnakej váhe">únava</span>' : ''}${sx.best ? `<span class="best" title="rekord">🏆 ${esc(fmtKg(sx.best))} kg</span>` : ''}</div>
+          <div class="exmeta"><span>${esc(prettySets(latestCell.e.planned.sets))}${latestCell.e.planned.rpe ? ' · RPE ' + esc(prettyNum(latestCell.e.planned.rpe)) : ''}</span>${!dr && sx.tip ? `<span class="tip ${sx.tip[0]}" title="${esc(sx.tip[2])}">${esc(sx.tip[1])}</span>` : ''}</div>
+          ${t.why && t.kind !== 'none' ? `<div class="why2">${esc(t.why)}</div>` : ''}</th>
           ${cols.map((col, i) => cellHtml(r, col, cols[i - 1])).join('')}
           ${dr ? (dRow ? draftCell(d, dr, dRow) : '<td class="draft none"></td>') : ''}</tr>`;
       }).join('');
