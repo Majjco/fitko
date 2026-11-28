@@ -13,7 +13,7 @@ apka funkčná.
 | A | Návrh ďalšieho týždňa (objem, +X % progresia, vloženie jedným klikom) | tréner | hotové (v14), čaká na test s trénerom | [002](002-next-week-suggestions/spec.md) |
 | B+D | **Trénerov panel** – zoznam klientov, týždne vedľa seba ako v Exceli, insighty, plánovanie ďalšieho týždňa na tej istej ploche (nahrádza záložky) | tréner | hotové (v15), čaká na nasadenie skriptu | [003](003-coach-panel/spec.md) |
 | C | Redizajn klientskej apky (vzhľad, tréning po sériách, pauzy, proaktívne tipy, rekordy) | klient | hotové (v17, Volt) | [004](004-app-redesign/spec.md) |
-| E | Viac klientov – **zoznam klientov hotový** (každý klient pošle odkaz); zostáva jeden skript pod trénerovým účtom namiesto skriptu u každého klienta | tréner | čiastočne | [003](003-coach-panel/spec.md) |
+| E | Viac klientov – **zoznam klientov hotový** (každý klient pošle odkaz); zostáva jeden skript pod trénerovým účtom namiesto skriptu u každého klienta | tréner | **pozastavené** (viď rozhodnutia) | [003](003-coach-panel/spec.md) |
 
 ## Rozhodnutia
 
@@ -31,3 +31,10 @@ apka funkčná.
 - 2026-11-28: Vzhľad apky „Volt“ (vybraný z 3 smerov). Nápad na neskôr: téma „Matrix“ ako voliteľný vzhľad.
 - 2026-11-28: Progres prerobiť (spec 005) – prototyp `specs/005-progress-redesign/prototype.html`.
   Hotové vo v21: Sila · Telo, čo najmenej textu (rekord = číslo, názov, trend).
+- 2026-11-28: Apka v21–v23 hotová a nasadená (nový Progres, zjednodušené obrazovky, panel trénera
+  vo vzhľade Volt s vývojom cvikov v mriežke).
+- 2026-11-28: **Funkcia E pozastavená.** Google Apps Script nie je technická prekážka pre jedného
+  trénera s desiatkami klientov (hlavný problém je nastavovanie skriptu u každého klienta). Vlastník
+  ale zvažuje, že budúce riešenie bude **bez Google tabuľky** (vlastný backend s databázou
+  a prihlasovaním) – to by zmenilo princíp I constitution. Rozhodne sa neskôr; dovtedy sa na E
+  nepracuje.
