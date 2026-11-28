@@ -12,7 +12,7 @@
   const DAY_LONG = ['Nedeľa', 'Pondelok', 'Utorok', 'Streda', 'Štvrtok', 'Piatok', 'Sobota'];
   const RPE_VALUES = ['6', '7', '7.5', '8', '8.5', '9', '9.5', '10'];
   const HISTORY_TTL = 24 * 60 * 60 * 1000;
-  const APP_VERSION = 17; // zvýš pri každom vydaní spolu s sw.js, version.json a trener.html
+  const APP_VERSION = 18; // zvýš pri každom vydaní spolu s sw.js, version.json a trener.html
   const LS = {
     config: 'fitko.config',
     plan: 'fitko.plan',
@@ -21,7 +21,9 @@
     queue: 'fitko.queue',
     sessions: 'fitko.sessions',
     live: 'fitko.live', // rozpracovaný tréning po sériách
+    theme: 'fitko.theme', // 'volt' | 'matrix' – len v tomto telefóne
   };
+  const THEMES = { volt: { name: 'Volt', color: '#0a0c0f' }, matrix: { name: 'Matrix', color: '#000000' } };
 
   // ---------------------------------------------------------------------------
   // Stav
@@ -1041,7 +1043,7 @@
     const st = ex && state.live.ex[ex.idx];
     const nextTxt = st && st.sets.length < totalSets(ex, st) ? `Ďalej: <b>séria ${st.sets.length + 1} · ${esc(fmtKg(st.cur.kg))} kg × ${st.cur.reps}</b>` : 'Ďalej: <b>ohodnoť cvik (RPE)</b>';
     return `<div class="pause ${left === 0 ? 'end' : ''}" role="dialog" aria-label="Pauza"><div><div class="eyebrow">Pauza</div>
-      <div class="rring"><svg viewBox="0 0 260 260"><defs><linearGradient id="rg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#d4ff3a"/><stop offset="1" stop-color="#3affc4"/></linearGradient></defs><circle class="bgc" cx="130" cy="130" r="118"/><circle class="fg" id="rfg" cx="130" cy="130" r="118" stroke-dasharray="${C2}" stroke-dashoffset="${C2 * (1 - left / r.total)}"/></svg>
+      <div class="rring"><svg viewBox="0 0 260 260"><defs><linearGradient id="rg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" style="stop-color:var(--a1)"/><stop offset="1" style="stop-color:var(--a2)"/></linearGradient></defs><circle class="bgc" cx="130" cy="130" r="118"/><circle class="fg" id="rfg" cx="130" cy="130" r="118" stroke-dasharray="${C2}" stroke-dashoffset="${C2 * (1 - left / r.total)}"/></svg>
       <div class="t"><span class="num" id="rleft">${Math.floor(left / 60)}:${pad(left % 60)}</span><span>${left === 0 ? 'poď na to' : 'oddychuj'}</span></div></div>
       <div class="next">${nextTxt}</div>
       <div class="acts"><button class="btn ghost" data-action="rest-plus">+30 s</button><button class="btn" data-action="rest-skip">${left === 0 ? 'Pokračovať' : 'Preskočiť'}</button></div></div></div>`;
@@ -1154,7 +1156,7 @@
     const xLabels = [0, pts.length - 1].filter((v, i, a) => a.indexOf(v) === i).map((i) =>
       `<text class="axis" x="${x(i)}" y="${H - 6}" text-anchor="${pts.length === 1 ? 'middle' : i === 0 ? 'start' : 'end'}">${esc(pts[i].date ? formatDate(pts[i].date, false) : 'T' + pts[i].week)}</text>`).join('');
     return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Graf">
-      <defs><linearGradient id="cg${pi}" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#3affc4"/><stop offset="1" stop-color="#d4ff3a"/></linearGradient><linearGradient id="ca${pi}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#d4ff3a" stop-opacity=".25"/><stop offset="1" stop-color="#d4ff3a" stop-opacity="0"/></linearGradient></defs>
+      <defs><linearGradient id="cg${pi}" x1="0" y1="0" x2="1" y2="0"><stop offset="0" style="stop-color:var(--a2)"/><stop offset="1" style="stop-color:var(--a1)"/></linearGradient><linearGradient id="ca${pi}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--a1);stop-opacity:.25"/><stop offset="1" style="stop-color:var(--a1);stop-opacity:0"/></linearGradient></defs>
       ${grid.join('')}<path d="${area}" fill="url(#ca${pi})"/><path class="line" d="${path}" style="stroke:url(#cg${pi})"/>${dots}
       ${compact ? '' : `<text class="tip" x="${lx}" y="${Math.max(14, y(sp.value) - 12)}" text-anchor="middle">${esc(label)}</text>`}${xLabels}</svg>`;
   }
@@ -1314,6 +1316,8 @@
         ${hasWrite() ? `<button class="btn ghost" type="button" data-action="copy-coach">Skopírovať odkaz pre trénera</button>
         <div class="hint">Pošli ho trénerovi – otvorí ním svoj panel (trener.html) a pridá si ťa medzi klientov. Prihlási sa svojím menom a heslom trénera, tvoje heslo odkaz neobsahuje.</div>` : ''}
       </form>
+      <div class="sec"><h3>Vzhľad</h3><span class="r muted">len v tomto telefóne</span></div>
+      <div class="looks">${Object.entries(THEMES).map(([k, t]) => `<button class="look ${currentTheme() === k ? 'on' : ''}" data-action="theme" data-theme="${k}" aria-pressed="${currentTheme() === k}"><div class="swatch ${k}">${k === 'matrix' ? '&gt;_ fitko' : ''}</div><b>${t.name}</b><span>${k === 'volt' ? 'limetková energia' : 'zelený kód v tme'}</span></button>`).join('')}</div>
       <div class="app-version">Fitko · verzia ${APP_VERSION}</div>`;
   }
 
@@ -1617,6 +1621,7 @@
         break;
       }
       case 'photos-upload': uploadPhotos(); break;
+      case 'theme': applyTheme(t.dataset.theme, true); render(); toast(`Vzhľad ${THEMES[t.dataset.theme].name}`); break;
       case 'copy-coach': {
         const link = new URL('trener.html', location.href).href.split('#')[0].split('?')[0] + '#s=' + btoa(unescape(encodeURIComponent(state.config.scriptUrl)));
         (navigator.clipboard ? navigator.clipboard.writeText(link) : Promise.reject())
@@ -1634,6 +1639,60 @@
       }
     }
   }
+
+  // ---------------------------------------------------------------------------
+  // Vzhľad (Volt / Matrix) a „padajúci kód“ v pozadí Matrixu
+  // ---------------------------------------------------------------------------
+  function currentTheme() { const t = load(LS.theme, 'volt'); return THEMES[t] ? t : 'volt'; }
+  function applyTheme(name, persist) {
+    const t = THEMES[name] ? name : 'volt';
+    if (persist) save(LS.theme, t);
+    document.documentElement.dataset.theme = t;
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', THEMES[t].color);
+    if (t === 'matrix') rain.start(); else rain.stop();
+  }
+  const rain = (() => {
+    let canvas = null, ctx = null, cols = [], timer = null, fs = 16;
+    const chars = '0123456789ﾊﾐﾋｰｳｼﾅﾓﾆｻﾜﾂｵﾘｱﾎﾃﾏｹﾒｴｶｷﾑﾕﾗｾﾈｽﾀﾇﾍ:・.=*+-<>¦';
+    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    function size() {
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      canvas.width = innerWidth * dpr; canvas.height = innerHeight * dpr;
+      canvas.style.width = innerWidth + 'px'; canvas.style.height = innerHeight + 'px';
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      cols = Array.from({ length: Math.ceil(innerWidth / fs) }, () => Math.random() * -40);
+      ctx.fillStyle = '#000'; ctx.fillRect(0, 0, innerWidth, innerHeight);
+    }
+    function frame() {
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.08)';
+      ctx.fillRect(0, 0, innerWidth, innerHeight);
+      ctx.font = `${fs}px ui-monospace, Menlo, monospace`;
+      cols.forEach((y, i) => {
+        const ch = chars[Math.floor(Math.random() * chars.length)];
+        ctx.fillStyle = Math.random() > 0.96 ? '#d6ffe0' : '#00ff41';
+        ctx.fillText(ch, i * fs, y * fs);
+        cols[i] = y * fs > innerHeight && Math.random() > 0.975 ? 0 : y + 1;
+      });
+    }
+    function loop() { if (document.visibilityState === 'visible') frame(); }
+    return {
+      start() {
+        if (!canvas) {
+          canvas = document.createElement('canvas');
+          canvas.id = 'rain';
+          canvas.setAttribute('aria-hidden', 'true');
+          document.body.prepend(canvas);
+          ctx = canvas.getContext('2d');
+          window.addEventListener('resize', () => { if (timer || reduce) size(); });
+        }
+        size();
+        if (reduce) { for (let k = 0; k < 60; k++) frame(); return; } // bez animácie – len statický obrazec
+        if (!timer) timer = setInterval(loop, 70);
+      },
+      stop() { clearInterval(timer); timer = null; },
+    };
+  })();
 
   // ---------------------------------------------------------------------------
   // Štart
@@ -1681,6 +1740,7 @@
     const wi = state.plan.sheet === sheet ? state.plan.weeks.findIndex((x) => x.n === Number(w)) : -1;
     if (wi >= 0) state.view = { name: 'workout', weekIdx: wi, dayN: Number(d), exIdx: null };
   }
+  applyTheme(currentTheme(), false);
   importSetupFromHash();
   render();
   refresh(Boolean(state.plan));

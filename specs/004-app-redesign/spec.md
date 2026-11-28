@@ -4,7 +4,7 @@
 
 **Created**: 2026-11-28
 
-**Status**: Implemented (apka v17, štýl Volt) – voliteľná téma „Matrix“ ako ďalší krok
+**Status**: Implemented (v17 Volt; v18 voliteľná téma Matrix v Nastaveniach)
 
 **Input**: User description: "Komplet UI redesign, aby to vyzeralo mega cool. Krásna, super sa
 používa, intuitívna, proaktívna."
@@ -111,3 +111,5 @@ cviku (váha, objem, rekord), ranná váha a fotky.
 - Jedna váha na cvik (rovnaká pre všetky série); rôzna váha po sériách sa zapíše do poznámky.
 - Smer vzhľadu sa vyberie z prototypu (3 farebné varianty).
 - Zvuk na konci pauzy len pri otvorenej apke (iOS nedovolí viac bez push notifikácií).
+- **FR-009** *(v18)*: V Nastaveniach výber vzhľadu Volt / Matrix; uložený len v zariadení; Matrix
+  má jemný animovaný „padajúci kód“ v pozadí (pri obmedzení pohybu len statický).
