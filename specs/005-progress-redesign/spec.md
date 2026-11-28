@@ -95,3 +95,18 @@ Ranná váha: graf denných vážení s čiarou 7-dňového priemeru, posledná,
 - Riadok cviku: názov, pod ním len váha (v „Pozor na“ + krátky dôvod: „stagnuje“,
   „nezvládnuté opak.“, „bolia kolená“), vpravo %.
 - Hlavné číslo: „Sila“ + % + „silnejší ako na začiatku bloku“. Dlaždice bez podpisov navyše.
+
+## Rozhodnutia (prototyp v7) – menej sekcií
+
+Nahrádza rozloženie US1–US3 (Prehľad · Cviky · Telo):
+
+- Prepínač len **Sila · Telo**. Prehľad a Cviky sú zlúčené.
+- **Sila**: jedna karta – % sily za blok + riadok dochádzky (pásik tréningov bloku a „10/11“).
+  Potom **Rekordy** (karty) a **Cviky** – jeden zoznam zoradený od najväčšieho rastu po pokles
+  (štýl E, pri probléme krátky dôvod). Bez dlaždíc, filtrov, mriežky dochádzky a sekcií
+  „Najväčší progres“ / „Pozor na“.
+- **Telo**: veľké číslo (priemer 7 dní) + štítok zmeny za 4 týždne, graf (body = dni, čiara =
+  priemer), fotky ako mriežka náhľadov s dátumom. Bez dlaždíc a legendy.
+- **Detail cviku**: názov, veľká aktuálna váha + štítok zmeny v bloku, prepínač **Váha · Objem**
+  (e1RM ostáva len vnútorne pre % trendu), graf, história (dátum · kg · série × opak., pohár pri
+  rekorde). Bez tabuľky, dlaždíc a poznámok.
