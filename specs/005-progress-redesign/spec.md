@@ -4,7 +4,7 @@
 
 **Created**: 2026-11-28
 
-**Status**: Draft – prototyp na odsúhlasenie
+**Status**: Implemented (v21, prototyp v7)
 
 **Input**: User description: "Záložku Progres celú prerobiť, určite sa dá spraviť lepšie."
 

@@ -30,3 +30,4 @@ apka funkčná.
   `specs/003-coach-panel/prototype.html`.
 - 2026-11-28: Vzhľad apky „Volt“ (vybraný z 3 smerov). Nápad na neskôr: téma „Matrix“ ako voliteľný vzhľad.
 - 2026-11-28: Progres prerobiť (spec 005) – prototyp `specs/005-progress-redesign/prototype.html`.
+  Hotové vo v21: Sila · Telo, čo najmenej textu (rekord = číslo, názov, trend).

@@ -389,10 +389,48 @@
     return { ...out, kind: 'same', why: 'bez výrazného rastu' };
   }
 
+  // ---------------------------------------------------------------------------
+  // Progres klienta (specs/005-progress-redesign)
+  // ---------------------------------------------------------------------------
+  // Odhad maxima na 1 opakovanie (Epley): 50 kg × 10 ≈ 66,7 kg
+  const e1rm = (kg, reps) => (kg > 0 ? kg * (1 + (reps > 0 ? reps : 0) / 30) : 0);
+  // Najvyšší počet opakovaní v sérii: „2x8“ -> 8, „10, 9, 8“ -> 10
+  function topReps(sets) {
+    const p = parseSets(sets);
+    return p && p.sets ? Math.max(...p.sets.map((x) => x.min)) : 0;
+  }
+  // Objem jedného cviku: súčet opakovaní × kg
+  function setsVolume(sets, kg) {
+    const p = parseSets(sets);
+    return p && p.sets && kg > 0 ? round2(p.sets.reduce((a, x) => a + x.min, 0) * kg) : 0;
+  }
+  /*
+   * Rekord posledného záznamu oproti všetkým predošlým ({ kg, reps, vol }):
+   * váha > doteraz najviac -> kg; pri rovnakej/vyššej váhe viac opakovaní -> reps;
+   * inak väčší objem -> vol. Bez predošlých záznamov rekord nie je.
+   */
+  function record(prev, last) {
+    if (!last || !(last.kg > 0) || !prev || !prev.length) return null;
+    const maxKg = Math.max(...prev.map((x) => x.kg || 0));
+    if (last.kg > maxKg) return { type: 'kg', diff: round2(last.kg - maxKg) };
+    const repsAt = Math.max(0, ...prev.filter((x) => x.kg >= last.kg).map((x) => x.reps || 0));
+    if (repsAt && last.reps > repsAt) return { type: 'reps', diff: last.reps - repsAt };
+    const maxVol = Math.max(0, ...prev.map((x) => x.vol || 0));
+    if (maxVol && last.vol > maxVol) return { type: 'vol', diff: last.vol / maxVol - 1 };
+    return null;
+  }
+  function recordChip(r) {
+    if (!r) return '';
+    if (r.type === 'kg') return `+${fmtKg(r.diff)} kg`;
+    if (r.type === 'reps') return `+${r.diff} opak.`;
+    return `${formatPct(r.diff)} objem`;
+  }
+
   const api = {
     splitParts, splitValues, parseSets, parseRpe, parseWeight, hasAny,
     volume, totalKg, missed, suggest, suggestPart, trend,
     formatVolume, formatPct, formatSets, fmtKg,
+    e1rm, topReps, setsVolume, record, recordChip,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.FitkoCalc = api;
