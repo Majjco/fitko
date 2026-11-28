@@ -247,3 +247,23 @@ rozpracovaného týždňa.
 - Na pridanie a premenovanie cviku pri odoslaní treba rozšíriť `applyWeek` v Apps Scripte
   (zápis názvu do voľného stĺpca) – bude treba ešte raz aktualizovať skript.
 - Predvolené prahy insightov (stagnácia ±2 % za 3 týždne, pokles −5 %) sú nastaviteľné neskôr.
+
+## Vzhľad a zjednodušenie (v23, 2026-11-28)
+
+- Panel má rovnaký vzhľad ako klientska apka (Volt): tmavé pozadie so žiarou, písmo Barlow
+  Condensed na nadpisy a čísla, zeleno-tyrkysový gradient, zaoblené karty.
+- Menej textu: karta klienta = meno, tréningy týždňa, váha a krátke štítky (napr. „10 dní pauza“,
+  „↓ 1 klesá“); v paneli klienta tri dlaždice bez popisov (Tréningy, Váha so štítkom zmeny,
+  Fotky), insighty bez nadpisu, bez legendy „V bunke…“, krátka nápoveda pri naplánovanom
+  týždni, lišta „Nový T3 · 4 zmeny“.
+- **Detail cviku (klik na názov)** má pre trénera všetky kľúčové informácie: trend s dôvodom,
+  štyri čísla (posledne – kg, série, RPE; rekord; odhad 1RM so zmenou za blok; objem so zmenou
+  oproti minule), graf **Váha · Objem · 1RM** aj zo starších blokov a **celú históriu**
+  (kedy · plán · výkon · objem · 1RM, pohár pri rekorde, poznámky klienta aj trénera).
+- V prehľade ostali kľúčové údaje: karta klienta ukazuje aj dni od tréningu; dlaždica Tréningy
+  ďalší deň a posledný tréning; dlaždica Váha dátum váženia.
+- **Všetko na jednej obrazovke (bez rozklikávania)**: v mriežke pri každom cviku zmena sily
+  (hore = za blok, stagnácia/pokles = oproti minulému týždňu), rekord, návrh na ďalší týždeň
+  („pridaj +2,5 kg“, „drž“, „uber −2,5 kg“, „cieľ 3×9“ – rovnaké pravidlá ako spec 002) a dôvod
+  trendu; bunky zafarbené podľa zmeny objemu oproti minulému týždňu, 🏆 pri rekorde a poznámka
+  klienta priamo v bunke. Detail cviku ostáva ako voliteľný.

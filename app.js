@@ -12,7 +12,7 @@
   const DAY_LONG = ['Nedeľa', 'Pondelok', 'Utorok', 'Streda', 'Štvrtok', 'Piatok', 'Sobota'];
   const RPE_VALUES = ['6', '7', '7.5', '8', '8.5', '9', '9.5', '10'];
   const HISTORY_TTL = 24 * 60 * 60 * 1000;
-  const APP_VERSION = 22; // zvýš pri každom vydaní spolu s sw.js, version.json a trener.html
+  const APP_VERSION = 23; // zvýš pri každom vydaní spolu s sw.js, version.json a trener.html
   const LS = {
     config: 'fitko.config',
     plan: 'fitko.plan',

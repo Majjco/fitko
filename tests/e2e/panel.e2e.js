@@ -34,7 +34,7 @@ const days = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return i
   const cardA = await page.textContent('.ccard[data-a=open]:has-text("Marián")');
   assert(/klesá|klesajú/.test(cardA) && /nová|nové/.test(cardA), 'karta: pokles a nové poznámky');
   assert(cardA.includes('84,2'), 'karta: ranná váha');
-  assert((await page.textContent('.app-version')).includes('verzia 22'), 'panel ukazuje verziu 22');
+  assert((await page.textContent('.app-version')).includes('verzia 23'), 'panel ukazuje verziu 23');
   if (OUT) await page.screenshot({ path: `${OUT}/panel-clients.png` });
 
   // 3) panel klienta A
@@ -53,7 +53,12 @@ const days = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return i
   await page.mouse.click(5, 5);
   await page.click('.exname:text("Squat")');
   await page.waitForSelector('.drawer .chart');
-  assert((await page.textContent('.drawer')).includes('Objem cviku'), 'detail cviku s grafmi');
+  assert((await page.textContent('.drawer')).includes('Objem'), 'detail cviku s grafmi');
+  assert(await page.locator('.drawer .htab tbody tr').count() >= 2, 'detail: história plán vs. výkon');
+  assert((await page.textContent('.drawer .snap')).includes('Rekord'), 'detail: kľúčové čísla');
+  await page.click('.drawer [data-a=dm][data-m=e]');
+  assert(await page.isVisible('.drawer .chart'), 'detail: graf 1RM');
+  if (OUT) await page.screenshot({ path: `${OUT}/panel-ex.png` });
   await page.click('.drawer [data-a=close-drawer]');
 
   // 4) nový týždeň
@@ -65,7 +70,7 @@ const days = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return i
   assert(await v('2-4-weight') === '97.5', 'návrh deadlift 97.5 (2× nezvládnuté)');
   await page.fill('#dr-1-4-weight', '51'); await page.locator('#dr-1-4-weight').blur();
   await page.waitForTimeout(100);
-  assert((await page.textContent('tr:has(.exname:text("Bench press")) td.draft')).includes('upravené tebou'), 'úprava označená');
+  assert((await page.textContent('tr:has(.exname:text("Bench press")) td.draft')).includes('upravené'), 'úprava označená');
   await page.click('tr:has(.exname:text("Lateral raise")) td.draft [data-a=skip]');
   assert((await page.textContent('tr:has(.exname:text("Lateral raise")) td.draft')).includes('vynechané'), 'vynechanie');
   await page.click('[data-a=add-extra][data-day="1"]');

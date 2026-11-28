@@ -71,10 +71,6 @@
     return withDay ? `${DAY_NAMES[date.getDay()]} ${date.getDate()}.${date.getMonth() + 1}.` : `${date.getDate()}.${date.getMonth() + 1}.`;
   }
   const daysAgo = (iso) => Math.round((new Date(new Date().toDateString()) - dateOf(iso)) / 86400000);
-  function agoText(iso) {
-    const n = daysAgo(iso);
-    return n <= 0 ? 'dnes' : n === 1 ? 'včera' : `pred ${n} dňami`;
-  }
   function doneSummary(d) {
     const parts = [];
     if (d.sets) parts.push(d.sets === 'Ok' ? 'Ok' : prettySets(d.sets));
@@ -603,35 +599,34 @@
     const wst = weightStatus(d);
     const idle = ws && ws.last ? daysAgo(ws.last) : null;
     const flags = [];
-    if (idle != null && idle >= 5) flags.push(['warn', `${idle} dní bez tréningu`]);
-    if (g.down.length) flags.push(['down', `↓ ${g.down.length} ${plural(g.down.length, 'cvik klesá', 'cviky klesajú', 'cvikov klesá')}`]);
-    if (g.fatigue.length) flags.push(['warn', `rastie únava (${g.fatigue.length})`]);
+    if (idle != null && idle >= 5) flags.push(['warn', `${idle} dní pauza`]);
+    if (g.down.length) flags.push(['down', `↓ ${g.down.length} ${plural(g.down.length, 'klesá', 'klesajú', 'klesá')}`]);
+    if (g.fatigue.length) flags.push(['warn', `únava ${g.fatigue.length}`]);
     if (g.unseen.length) flags.push(['notes', `${g.unseen.length} ${plural(g.unseen.length, 'nová poznámka', 'nové poznámky', 'nových poznámok')}`]);
     if (g.same.length) flags.push(['', `→ ${g.same.length} ${plural(g.same.length, 'stagnuje', 'stagnujú', 'stagnuje')}`]);
-    if (g.up.length) flags.push(['up', `↑ ${g.up.length} ${plural(g.up.length, 'cvik ide hore', 'cviky idú hore', 'cvikov ide hore')}`]);
+    if (g.up.length) flags.push(['up', `↑ ${g.up.length} hore`]);
     const score = (idle >= 5 ? 40 : 0) + g.down.length * 10 + g.fatigue.length * 8 + g.unseen.length * 5 + g.same.length * 2;
     const html = `<button class="ccard" data-a="open" data-id="${c.id}">${head}
       <div class="ccard-stats">
-        ${ws ? `<span><b>${ws.done}/${ws.total}</b> ${plural(ws.total, 'tréning', 'tréningy', 'tréningov')} v T${ws.w.n}</span>` : ''}
-        ${ws && ws.last ? `<span>naposledy <b>${esc(agoText(ws.last))}</b></span>` : ''}
-        ${wst ? `<span><b>${esc(fmtKg(wst.last.kg))}</b> kg ráno</span>` : ''}
+        ${ws ? `<div class="st"><b class="num">${ws.done}<small>/${ws.total}</small></b><span>T${ws.w.n}</span></div>` : ''}
+        ${wst ? `<div class="st"><b class="num">${esc(fmtKg(wst.last.kg))}<small> kg</small></b><span>váha</span></div>` : ''}
+        ${idle != null ? `<div class="st"><b class="num">${idle <= 0 ? 'dnes' : idle === 1 ? 'včera' : idle + '<small> d</small>'}</b><span>${idle <= 1 ? 'tréning' : 'od tréningu'}</span></div>` : ''}
       </div>
-      <div class="flags">${flags.map(([cls, t]) => `<span class="flag ${cls}">${esc(t)}</span>`).join('') || '<span class="flag">zatiaľ málo dát</span>'}</div>
+      ${flags.length ? `<div class="flags">${flags.map(([cls, t]) => `<span class="flag ${cls}">${esc(t)}</span>`).join('')}</div>` : ''}
     </button>`;
     return { score, html };
   }
 
   function renderClients() {
     const cards = state.clients.map(clientCard).sort((a, b) => b.score - a.score).map((x) => x.html).join('');
-    const now = new Date();
     return `
       <div class="topbar">
-        <h1>Moji klienti<span class="sub">${DAY_NAMES[now.getDay()]} ${now.getDate()}. ${now.getMonth() + 1}. · kto potrebuje pozornosť, je prvý</span></h1>
+        <h1>Klienti</h1>
         <button class="icon-btn" data-a="reload-all" aria-label="Obnoviť">${ICON.refresh}</button>
         <button class="icon-btn" data-a="logout" aria-label="Odhlásiť">${ICON.logout}</button>
       </div>
       <div class="clients">${cards}
-        <button class="ccard add-client" data-a="add-client"><span class="plus">+</span><b>Pridať klienta</b><span>Vlož odkaz, ktorý ti klient poslal z apky</span></button>
+        <button class="ccard add-client" data-a="add-client"><span class="plus">+</span><b>Pridať klienta</b></button>
       </div>
       <div class="app-version">Fitko · Tréner · verzia ${PANEL_VERSION || '?'}</div>`;
   }
@@ -651,7 +646,7 @@
     const d = st.d;
     const model = d ? buildModel(d) : null;
     const top = `<div class="topbar phead"><button class="icon-btn" data-a="clients" aria-label="Späť na klientov">${ICON.back}</button>
-      <h1>${esc((d && d.title) || c.title || 'Klient')}<span class="sub">${d ? `${esc(d.sheet.trim())} · ${model.cols.length} ${plural(model.cols.length, 'týždeň', 'týždne', 'týždňov')}` : ''}${st.loading ? ' · načítavam…' : ''}</span></h1>
+      <h1>${esc((d && d.title) || c.title || 'Klient')}<span class="sub">${d ? esc(d.sheet.trim()) : ''}${st.loading ? ' · načítavam…' : ''}</span></h1>
       <button class="icon-btn" data-a="reload" aria-label="Obnoviť">${ICON.refresh}</button></div>`;
     if (!d) return top + (st.error ? `<div class="banner err"><div>${esc(st.error)}</div><button data-a="reload">Skúsiť znova</button></div>` : '<div class="empty"><div class="spinner"></div>Načítavam tabuľku…</div>');
     const g = insightsOf(c, d, model);
@@ -661,27 +656,25 @@
     const ws = weekStatus(d);
     const wst = weightStatus(d);
     const lastPhoto = d.photos[d.photos.length - 1];
+    const wd = wst && wst.diff != null ? Math.round(wst.diff * 10) / 10 : null;
     const snap = `<div class="snap">
-      <div class="tile"><span class="tile-k">Tento týždeň${ws ? ` (T${ws.w.n})` : ''}</span>
-        <span class="tile-v">${ws ? `${ws.done}<small>/${ws.total} ${plural(ws.total, 'tréning', 'tréningy', 'tréningov')}</small>` : '–'}</span>
-        <span class="tile-s">${ws ? (ws.next ? `čaká Deň ${ws.next.n}${ws.next.date ? ' · ' + esc(formatDate(ws.next.date)) : ''}` : 'všetko odcvičené') + (ws.last ? ` · naposledy ${esc(agoText(ws.last))}` : '') : 'bez plánu'}</span></div>
-      <button class="tile" data-a="body"><span class="tile-k">Ranná váha</span>
+      <div class="tile hero"><div class="in"><span class="tile-k">Tréningy${ws ? ` · T${ws.w.n}` : ''}</span>
+        <span class="tile-v gtext">${ws ? `${ws.done}<small>/${ws.total}</small>` : '–'}</span>
+        <span class="tile-s">${ws ? [ws.next ? `ďalší Deň ${ws.next.n}${ws.next.date ? ' · ' + esc(formatDate(ws.next.date)) : ''}` : 'všetko odcvičené', ws.last ? `naposledy ${esc(formatDate(ws.last))}` : ''].filter(Boolean).join(' · ') : ''}</span></div></div>
+      <button class="tile" data-a="body"><div class="row"><span class="tile-k">Váha</span>${wd ? `<span class="tchip ${wd < 0 ? 'dn' : ''}">${wd > 0 ? '↑ +' : '↓ −'}${esc(fmtKg(Math.abs(wd)))} kg</span>` : ''}</div>
         <span class="tile-v">${wst ? `${esc(fmtKg(wst.last.kg))}<small> kg · ${esc(formatDate(wst.last.date, false))}</small>` : '–'}</span>
-        <span class="tile-s">${wst && wst.diff != null ? `<b>${wst.diff > 0 ? '+' : wst.diff < 0 ? '−' : '±'}${esc(fmtKg(Math.abs(Math.round(wst.diff * 10) / 10)))} kg</b> za 7 dní` : wst ? 'málo vážení' : 'klient zatiaľ nezapisuje'}</span>
         ${wst ? sparkline(wst.recent) : ''}</button>
-      <button class="tile" data-a="body"><span class="tile-k">Fotky progresu</span>
-        <span class="tile-v">${lastPhoto ? `${esc(formatDate(lastPhoto.date, false))}<small> · ${lastPhoto.count} ${plural(lastPhoto.count, 'fotka', 'fotky', 'fotiek')}</small>` : '–'}</span>
-        <span class="tile-s">${lastPhoto ? `spolu ${d.photos.length}× · otvoriť` : 'zatiaľ žiadne'}</span></button>
+      <button class="tile" data-a="body"><div class="row"><span class="tile-k">Fotky</span>${lastPhoto ? `<span class="tchip">${lastPhoto.count}</span>` : ''}</div>
+        <span class="tile-v">${lastPhoto ? esc(formatDate(lastPhoto.date, false)) : '–'}</span></button>
     </div>`;
 
     const chip = (k, cls, label) => (g[k].length ? `<button class="ins ${cls} ${state.focus === k ? 'on' : ''}" data-a="focus" data-k="${k}"><b>${k === 'notes' ? g.unseen.length : g[k].length}</b> ${label}</button>` : '');
-    const ins = `<div class="insights"><span class="lbl">Na prvý pohľad</span>
-      ${chip('up', 'up', plural(g.up.length, 'cvik ide hore', 'cviky idú hore', 'cvikov ide hore'))}
+    const ins = `<div class="insights">
+      ${chip('up', 'up', 'hore')}
       ${chip('same', 'same', plural(g.same.length, 'stagnuje', 'stagnujú', 'stagnuje'))}
       ${chip('down', 'down', plural(g.down.length, 'klesá', 'klesajú', 'klesá'))}
-      ${chip('fatigue', 'warn', 'rastie únava (RPE pri rovnakej váhe)')}
-      ${chip('notes', 'note', plural(g.unseen.length, 'nová poznámka klienta', 'nové poznámky klienta', 'nových poznámok klienta'))}
-      ${!g.up.length && !g.same.length && !g.down.length ? '<span class="muted">Trendy sa ukážu po 2 odcvičených týždňoch.</span>' : ''}
+      ${chip('fatigue', 'warn', 'únava')}
+      ${chip('notes', 'note', plural(g.unseen.length, 'nová poznámka', 'nové poznámky', 'nových poznámok'))}
     </div>`;
 
     const lp = lastPlannedIdx(d);
@@ -696,8 +689,7 @@
         : `<button class="btn add-week" data-a="add-week">+ Pridať týždeň ${nextN}</button>`;
     }
     const tb = `<div class="toolbar"><div class="legend">
-        ${!dr && unstarted ? `<div class="plan-hint"><b>T${lpW.n} je naplánovaný, ${who} ho ešte necvičil.</b> Uprav ho tlačidlom „Upraviť T${lpW.n}“ (všetky cviky naraz, aj s návrhom podľa výkonov) alebo klikni na jednu bunku. Týždeň ${nextN} pridáš, keď bude T${lpW.n} za vami.</div>` : ''}
-        <span>V bunke: <b>váha</b> · série × opakovania · RPE · <b>objem cviku</b> (série × opak. × kg) a zmena oproti minulému týždňu. Svetlé = plán, ktorý ešte necvičil.</span></div>
+        ${!dr && unstarted ? `<div class="plan-hint"><b>T${lpW.n} je naplánovaný</b> – ${who} ho ešte necvičil.</div>` : ''}</div>
       ${actions}</div>`;
 
     return top + snap + ins + (dr ? draftBanners(d, dr) : '') + tb + (model.rows.length ? `<div class="gridwrap">${renderGrid(c, d, model, g, dr)}</div>` : '<div class="empty">V tabuľke zatiaľ nie je žiadny plán.</div>') +
@@ -722,6 +714,46 @@
     return out;
   }
 
+  // Vývoj cviku v aktuálnom bloku: zmena sily (1RM), rekordy po týždňoch, návrh na ďalší týždeň.
+  function rowStats(d, r, cols) {
+    const done = cols.map((col) => r.cells[col.w.n]).filter((x) => x && hasAny(x.e.done));
+    const pts = done.map((x) => {
+      const e = x.e;
+      const wp = C.parseWeight(String(e.done.weight).split(/\s+a\s+/)[0]);
+      const kg = wp && wp.lo ? wp.lo : 0;
+      const ds = String(e.done.sets).split(/\s+a\s+/)[0];
+      const ps = C.parseSets(ds);
+      const reps = C.topReps(ps && ps.ok ? String(e.planned.sets).split(/\s+a\s+/)[0] : ds);
+      return { w: x.w.n, x, kg, reps, vol: C.totalKg(C.volume(e.name, e.planned, e.done)), e1: C.e1rm(kg, reps) };
+    });
+    const rec = {};
+    pts.forEach((p, i) => { const q = C.record(pts.slice(0, i).filter((z) => z.kg), p); if (q) rec[p.w] = q; });
+    const withKg = pts.filter((p) => p.e1);
+    const block = withKg.length > 1 ? withKg[withKg.length - 1].e1 / withKg[0].e1 - 1 : null;
+    const lp = pts[pts.length - 1], pp = pts[pts.length - 2];
+    const recentE = lp && pp && lp.e1 && pp.e1 ? lp.e1 / pp.e1 - 1 : null;
+    const recentV = lp && pp && lp.vol && pp.vol ? lp.vol / pp.vol - 1 : null;
+    const best = pts.reduce((m, p) => Math.max(m, p.kg), 0);
+    let tip = null;
+    const last = done[done.length - 1];
+    if (last) {
+      const prev = done[done.length - 2];
+      const sg = C.suggest({ name: last.e.name, planned: last.e.planned, done: last.e.done, prevMissed: prev ? C.missed(prev.e.name, prev.e.planned, prev.e.done) : false, step: stepFor(d, last.e.name), pct: settingsOf(d).pct / 100 });
+      const nw = C.parseWeight(String(sg.fields.weight).split(/\s+a\s+/)[0]);
+      const lw = pts[pts.length - 1].kg;
+      const dw = nw && nw.lo && lw ? Math.round((nw.lo - lw) * 100) / 100 : 0;
+      const target = /cieľ (\d+×\d+) opak/.exec(sg.reason);
+      if (sg.review || sg.rule === 'R0') tip = ['warn', 'skontroluj'];
+      else if (dw > 0) tip = ['up', `pridaj +${fmtKg(dw)} kg`];
+      else if (dw < 0) tip = ['down', `uber −${fmtKg(-dw)} kg`];
+      else if (target) tip = ['up', `cieľ ${target[1]}`];
+      else if (sg.rule === 'R6' || sg.rule === 'R5') tip = ['up', 'pridaj opak.'];
+      else tip = ['same', 'drž'];
+      tip.push(sg.reason);
+    }
+    return { rec, block, recentE, recentV, best, tip };
+  }
+
   function cellHtml(r, col, prevCol) {
     const cell = r.cells[col.w.n];
     if (!cell) return '<td class="cell empty"></td>';
@@ -740,8 +772,9 @@
     const pv = pc && hasAny(pc.e.done) ? C.totalKg(C.volume(pc.e.name, pc.e.planned, pc.e.done)) : 0;
     const cls = pv && v ? (v > pv * 1.005 ? 'up' : v < pv * 0.995 ? 'down' : '') : '';
     const vl = v ? `<span class="v">objem <b>${esc(C.formatVolume(v))}</b>${pv ? ` <span class="p ${cls}">${esc(C.formatPct(v / pv - 1))}</span>` : ''}</span>` : '';
-    return `<td class="cell ${cls}"><span class="w">${esc(prettyNum(e.done.weight) || '–')}${isNumW(e.done.weight) ? ' kg' : ''}${notes ? `<span class="nts">${notes}</span>` : ''}</span>
-      <span class="s">${esc(e.done.sets === 'Ok' ? 'Ok' : prettySets(e.done.sets))}${e.done.rpe ? ' · RPE ' + esc(prettyNum(e.done.rpe)) : ''}</span>${vl}</td>`;
+    const rc = r.stats && r.stats.rec[col.w.n];
+    return `<td class="cell ${cls} ${rc ? 'rec' : ''}"><span class="w">${esc(prettyNum(e.done.weight) || '–')}${isNumW(e.done.weight) ? ' kg' : ''}${rc ? `<span class="trophy" title="rekord: ${esc(C.recordChip(rc))}">🏆</span>` : ''}${notes ? `<span class="nts">${notes}</span>` : ''}</span>
+      <span class="s">${esc(e.done.sets === 'Ok' ? 'Ok' : prettySets(e.done.sets))}${e.done.rpe ? ' · RPE ' + esc(prettyNum(e.done.rpe)) : ''}</span>${vl}${e.done.note ? `<span class="cn">„${esc(e.done.note)}“</span>` : ''}</td>`;
   }
 
   function shortWhy(r, pct) {
@@ -770,8 +803,8 @@
     const dw = wNew && wOld && wNew.lo && wOld.lo ? wNew.lo - wOld.lo : 0;
     const lastDone = dRow.src ? C.totalKg(C.volume(dRow.e.name, dRow.src.planned, dRow.src.done)) : 0;
     const nv = C.totalKg(C.volume(dRow.e.name, f, f));
-    const volLine = nv ? `<span class="v">objem <b>${esc(C.formatVolume(nv))}</b>${lastDone ? ` <span class="p ${nv > lastDone * 1.005 ? 'up' : nv < lastDone * 0.995 ? 'down' : ''}">${esc(C.formatPct(nv / lastDone - 1))}</span> vs. T${dRow.src.week}` : ''}</span>` : '';
-    const why = dRow.st.edited ? '<span class="why">upravené tebou</span>'
+    const volLine = nv ? `<span class="v">objem <b>${esc(C.formatVolume(nv))}</b>${lastDone ? ` <span class="p ${nv > lastDone * 1.005 ? 'up' : nv < lastDone * 0.995 ? 'down' : ''}">${esc(C.formatPct(nv / lastDone - 1))}</span>` : ''}</span>` : '';
+    const why = dRow.st.edited ? '<span class="why">upravené</span>'
       : dr.mode === 'copy' ? `<span class="why">${dr.edit ? 'aktuálny plán' : `kópia T${dr.from}`}</span>`
       : `<span class="why ${dRow.s.review ? 'rev' : ''}" title="${esc(dRow.s.reason)}">${dw ? `<span class="d ${dw > 0 ? 'up' : 'down'}">${dw > 0 ? '+' : '−'}${esc(fmtKg(Math.abs(dw)))} kg</span> ` : ''}${esc(shortWhy(dRow, settingsOf(d).pct))}</span>`;
     const inp = (k, cls, label, ph) => `<input id="${id}-${k}" class="${cls} ${String(f[k] || '') !== String(base[k] || '') ? 'chg' : ''}" data-dk="${key}" data-f="${k}" value="${esc(f[k] || '')}" placeholder="${esc(ph)}" aria-label="${esc(label + ' – ' + nice(dRow.e.name))}" autocomplete="off">`;
@@ -813,10 +846,16 @@
         const cls = focusSet ? (focusSet.includes(r.key) ? 'hl' : 'dim') : '';
         const latestCell = allCols.slice().reverse().map(({ w }) => r.cells[w.n]).find(Boolean);
         const t = r.trend;
-        const trendHtml = t.kind === 'none' ? '' : `<span class="trend ${t.kind}" title="${esc(t.why)}">${t.kind === 'up' ? '↑ ide hore' : t.kind === 'down' ? '↓ klesá' : '→ stagnuje'}</span>`;
+        r.stats = rowStats(d, r, allCols);
+        const sx = r.stats;
+        // hore = zmena sily za blok; stagnácia / pokles = zmena oproti minulému týždňu
+        const tp = t.kind === 'up' ? sx.block : t.kind === 'down' ? Math.min(0, sx.recentE == null ? 0 : sx.recentE, sx.recentV == null ? 0 : sx.recentV) : sx.recentE;
+        const trendHtml = t.kind === 'none' ? '' : `<span class="trend ${t.kind}" title="${esc(t.why)}">${t.kind === 'up' ? '↑' : t.kind === 'down' ? '↓' : '→'} ${tp != null ? esc(C.formatPct(tp)) : t.kind === 'up' ? 'hore' : t.kind === 'down' ? 'klesá' : 'stagnuje'}</span>`;
         const dRow = dByRow.get(r.key);
         return `<tr class="${cls}"><th class="exc"><button class="exname" data-a="ex" data-r="${esc(r.key)}">${esc(nice(r.name))}</button>
-          <div class="exmeta">${trendHtml}${t.fatigue ? '<span class="trend down" title="RPE rastie pri rovnakej váhe">únava</span>' : ''}<span>${esc(prettySets(latestCell.e.planned.sets))}${latestCell.e.planned.rpe ? ' · RPE ' + esc(prettyNum(latestCell.e.planned.rpe)) : ''}</span></div></th>
+          <div class="exmeta">${trendHtml}${t.fatigue ? '<span class="trend down" title="RPE rastie pri rovnakej váhe">únava</span>' : ''}${sx.best ? `<span class="best" title="rekord">🏆 ${esc(fmtKg(sx.best))} kg</span>` : ''}</div>
+          <div class="exmeta"><span>${esc(prettySets(latestCell.e.planned.sets))}${latestCell.e.planned.rpe ? ' · RPE ' + esc(prettyNum(latestCell.e.planned.rpe)) : ''}</span>${!dr && sx.tip ? `<span class="tip ${sx.tip[0]}" title="${esc(sx.tip[2])}">${esc(sx.tip[1])}</span>` : ''}</div>
+          ${t.why && t.kind !== 'none' ? `<div class="why2">${esc(t.why)}</div>` : ''}</th>
           ${cols.map((col, i) => cellHtml(r, col, cols[i - 1])).join('')}
           ${dr ? (dRow ? draftCell(d, dr, dRow) : '<td class="draft none"></td>') : ''}</tr>`;
       }).join('');
@@ -839,7 +878,7 @@
 
   function barText(c, d, dr) {
     const n = draftChanges(draftRows(c, d, dr), dr);
-    return `${n} ${plural(n, 'zmena', 'zmeny', 'zmien')} ${dr.edit ? 'oproti aktuálnemu plánu' : `oproti T${dr.from}`} · uložené v tomto prehliadači`;
+    return `${n} ${plural(n, 'zmena', 'zmeny', 'zmien')}`;
   }
   function renderBar() {
     let bar = document.getElementById('bar');
@@ -852,7 +891,7 @@
     const target = dr.target || expectedTarget(d, d.weeks.findIndex((w) => w.n === dr.from));
     const failed = dr.failed && dr.failed.length;
     const busy = state.busy.send;
-    bar.innerHTML = `<div class="bar-in"><div class="info"><b>${failed ? `Týždeň ${target}: ${dr.failed.length} ${plural(dr.failed.length, 'cvik čaká', 'cviky čakajú', 'cvikov čaká')} na odoslanie` : dr.edit ? `Upravuješ týždeň ${target}` : `Týždeň ${target} je rozpracovaný`}</b><span id="bar-sub">${esc(barText(c, d, dr))}</span></div>
+    bar.innerHTML = `<div class="bar-in"><div class="info"><b>${failed ? `T${target}: ${dr.failed.length} ${plural(dr.failed.length, 'cvik čaká', 'cviky čakajú', 'cvikov čaká')}` : dr.edit ? `Úprava T${target}` : `Nový T${target}`}</b><span id="bar-sub">${esc(barText(c, d, dr))}</span></div>
       <button class="btn ghost" data-a="discard" ${busy ? 'disabled' : ''}>Zahodiť</button>
       <button class="btn" data-a="${failed ? 'retry-send' : 'send'}" ${busy || !d.settings ? 'disabled' : ''}>${busy ? 'Odosielam…' : failed ? 'Odoslať chýbajúce' : dr.edit ? 'Uložiť a poslať klientovi' : 'Odoslať klientovi'}</button></div>`;
   }
@@ -889,13 +928,13 @@
         }
       }
     }
-    if (state.drawer && state.drawer.kind === 'ex') out += renderExDrawer(c, d, state.drawer.key);
+    if (state.drawer && state.drawer.kind === 'ex') out += renderExDrawer(c, d, state.drawer.key, state.drawer.m);
     if (state.drawer && state.drawer.kind === 'body') out += renderBodyDrawer(d);
     return out;
   }
 
   function chartSvg(pts, opts) {
-    const W = 380, H = 170, L = 46, R = 12, T = 14, B = 26;
+    const W = opts && opts.wide ? 700 : 380, H = opts && opts.wide ? 220 : 170, L = 46, R = 12, T = 14, B = 26;
     if (!pts.length) return '<p class="hint">Zatiaľ žiadne dáta.</p>';
     const vals = pts.map((p) => p.value);
     let mn = Math.min(...vals), mx = Math.max(...vals);
@@ -912,7 +951,8 @@
     return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img">${grid}${seps}<path class="line" d="${path}"/>${dots}${lbl}</svg>`;
   }
 
-  function renderExDrawer(c, d, key) {
+  // Detail cviku: kľúčové čísla, graf (váha / objem / 1RM) a celá história plán vs. výkon.
+  function renderExDrawer(c, d, key, metric) {
     const r = rowByKey(d, key);
     if (!r) return '';
     const k = nameKey(r.name);
@@ -921,26 +961,48 @@
     const add = (weeks, block, cur) => weeks.forEach((w) => w.days.forEach((day) => day.exercises.forEach((e) => {
       if (nameKey(e.name) !== k || !hasAny(e.done)) return;
       const wp = C.parseWeight(String(e.done.weight).split(/\s+a\s+/)[0]);
-      pts.push({ date: day.date || '', block, cur, week: w.n, e, w: wp && wp.lo ? wp.lo : null, v: C.totalKg(C.volume(e.name, e.planned, e.done)), label: day.date ? formatDate(day.date, false) : 'T' + w.n });
+      const kg = wp && wp.lo ? wp.lo : null;
+      const ps = C.parseSets(String(e.done.sets).split(/\s+a\s+/)[0]);
+      const sets = ps && ps.ok ? String(e.planned.sets).split(/\s+a\s+/)[0] : String(e.done.sets).split(/\s+a\s+/)[0];
+      const reps = C.topReps(sets);
+      pts.push({ date: day.date || '', block, cur, week: w.n, day: day.n, e, kg, reps, v: C.totalKg(C.volume(e.name, e.planned, e.done)), e1: kg ? C.e1rm(kg, reps) : 0, label: day.date ? formatDate(day.date, false) : 'T' + w.n });
     })));
     if (hist) hist.sheets.forEach((s) => add(s.weeks, s.name, false));
     add(d.weeks, d.sheet, true);
     pts.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
-    const wPts = pts.filter((p) => p.w).map((p) => ({ value: p.w, label: p.label, block: p.block, cur: p.cur }));
-    const vPts = pts.filter((p) => p.v).map((p) => ({ value: p.v, label: p.label, block: p.block, cur: p.cur }));
-    const notes = [];
-    for (const p of pts.slice().reverse()) if (p.e.done.note) notes.push([`Klient · ${p.cur ? 'T' + p.week : p.block.trim() + ' · T' + p.week}${p.date ? ' · ' + p.label : ''}`, `„${p.e.done.note}“`]);
-    for (const col of buildModel(d).cols.slice().reverse()) { const cell = r.cells[col.w.n]; if (cell && cell.e.planned.note) notes.push([`Tréner · T${col.w.n}`, cell.e.planned.note]); }
+    pts.forEach((p, i) => { p.rec = C.record(pts.slice(0, i).filter((q) => q.kg).map((q) => ({ kg: q.kg, reps: q.reps, vol: q.v })), { kg: p.kg, reps: p.reps, vol: p.v }); });
+    const m = metric === 'v' || metric === 'e' ? metric : 'w';
+    const cPts = pts.filter((p) => (m === 'v' ? p.v : p.kg)).map((p) => ({ value: m === 'v' ? p.v : m === 'e' ? p.e1 : p.kg, label: p.label, block: p.block, cur: p.cur }));
     const t = r.trend;
     const step = stepFor(d, r.name);
-    return `<div class="drawer-bg" data-a="close-drawer"></div><aside class="drawer" role="dialog" aria-label="Detail cviku">
+    const last = pts[pts.length - 1], prev = pts[pts.length - 2];
+    const cur = pts.filter((p) => p.cur && p.e1);
+    const best = pts.filter((p) => p.kg).reduce((b, p) => (!b || p.kg > b.kg || (p.kg === b.kg && p.reps > b.reps) ? p : b), null);
+    const pctChip = (a, b) => (a && b ? `<span class="tchip ${a > b * 1.005 ? 'up' : a < b * 0.995 ? 'down' : ''}">${esc(C.formatPct(a / b - 1))}</span>` : '');
+    const tiles = last ? `<div class="snap four">
+      <div class="tile"><span class="tile-k">Posledne · ${esc(last.label)}</span><span class="tile-v">${last.kg ? esc(fmtKg(last.kg)) + '<small> kg</small>' : '–'}</span><span class="tile-s">${esc(last.e.done.sets === 'Ok' ? 'Ok' : prettySets(last.e.done.sets))}${last.e.done.rpe ? ' · RPE ' + esc(prettyNum(last.e.done.rpe)) : ''}</span></div>
+      <div class="tile"><div class="row"><span class="tile-k">Rekord</span>${best ? `<span class="tchip">${esc(best.label)}</span>` : ''}</div><span class="tile-v gtext">${best ? esc(fmtKg(best.kg)) + '<small> kg</small>' : '–'}</span><span class="tile-s">${best && best.reps ? '× ' + best.reps + ' opak.' : ''}</span></div>
+      <div class="tile"><div class="row"><span class="tile-k">1RM odhad</span>${cur.length > 1 ? pctChip(cur[cur.length - 1].e1, cur[0].e1) : ''}</div><span class="tile-v">${last.e1 ? Math.round(last.e1) + '<small> kg</small>' : '–'}</span><span class="tile-s">${cur.length > 1 ? 'za blok' : ''}</span></div>
+      <div class="tile"><div class="row"><span class="tile-k">Objem</span>${prev ? pctChip(last.v, prev.v) : ''}</div><span class="tile-v">${last.v ? esc(C.formatVolume(last.v)) + '<small> kg</small>' : '–'}</span><span class="tile-s">${prev && prev.v ? 'oproti minule' : ''}</span></div>
+    </div>` : '';
+    const plan = (e) => [e.planned.sets ? prettySets(e.planned.sets) : '', e.planned.weight ? prettyNum(e.planned.weight) + (isNumW(e.planned.weight) ? ' kg' : '') : '', e.planned.rpe ? 'RPE ' + prettyNum(e.planned.rpe) : ''].filter(Boolean).join(' · ');
+    const rows = pts.slice().reverse().map((p) => {
+      const dn = p.e.done;
+      const notes = [p.e.planned.note ? `<span class="hn coach">T: ${esc(p.e.planned.note)}</span>` : '', dn.note ? `<span class="hn">„${esc(dn.note)}“</span>` : ''].join('');
+      return `<tr class="${p.cur ? '' : 'old'}"><td><b>${esc(p.label)}</b><small>${p.cur ? 'T' + p.week : esc(p.block.trim()) + ' · T' + p.week}</small></td>
+        <td class="muted">${esc(plan(p.e))}</td>
+        <td><b class="kg">${esc(prettyNum(dn.weight) || '–')}${isNumW(dn.weight) ? ' kg' : ''}</b> ${esc(dn.sets === 'Ok' ? 'Ok' : prettySets(dn.sets))}${dn.rpe ? ' · RPE ' + esc(prettyNum(dn.rpe)) : ''}${p.rec ? ` <span class="rec" title="rekord">🏆 ${esc(C.recordChip(p.rec))}</span>` : ''}${notes ? `<div class="hnotes">${notes}</div>` : ''}</td>
+        <td class="r">${p.v ? esc(C.formatVolume(p.v)) : '–'}</td><td class="r">${p.e1 ? Math.round(p.e1) : '–'}</td></tr>`;
+    }).join('');
+    const seg = (key2, l) => `<button class="${m === key2 ? 'on' : ''}" data-a="dm" data-m="${key2}">${l}</button>`;
+    return `<div class="drawer-bg" data-a="close-drawer"></div><aside class="drawer wide" role="dialog" aria-label="Detail cviku">
       <div class="drawer-head"><h2>${esc(nice(r.name))}</h2><button class="icon-btn" data-a="close-drawer" aria-label="Zavrieť">${ICON.close}</button></div>
-      <div class="flags">${t.kind !== 'none' ? `<span class="flag ${t.kind}">${t.kind === 'up' ? '↑ ide hore' : t.kind === 'down' ? '↓ klesá' : '→ stagnuje'} · ${esc(t.why)}</span>` : ''}${t.fatigue ? '<span class="flag warn">rastie únava</span>' : ''}</div>
-      <section><h3>Váha (kg)</h3>${chartSvg(wPts)}</section>
-      <section><h3>Objem cviku (kg)</h3>${chartSvg(vPts, { vol: true })}</section>
-      <p class="hint">${hist && hist.loading ? 'Načítavam staršie bloky…' : hist && hist.sheets.length ? `Vrátane starších blokov (${esc(hist.sheets.map((s) => s.name.trim()).join(', '))}) – svetlé body, zvislá čiara = nový blok.` : 'Aktuálny blok.'}</p>
+      <div class="flags">${t.kind !== 'none' ? `<span class="flag ${t.kind}">${t.kind === 'up' ? '↑ hore' : t.kind === 'down' ? '↓ klesá' : '→ stagnuje'} · ${esc(t.why)}</span>` : ''}${t.fatigue ? '<span class="flag warn">rastie únava – RPE stúpa pri rovnakej váhe</span>' : ''}</div>
+      ${tiles}
+      <section><div class="seg big" role="group" aria-label="Graf">${seg('w', 'Váha')}${seg('v', 'Objem')}${seg('e', '1RM')}</div>${chartSvg(cPts, { vol: m === 'v', wide: true })}
+        <p class="hint">${hist && hist.loading ? 'Načítavam staršie bloky…' : hist && hist.sheets.length ? 'Svetlé body = staršie bloky.' : ''}</p></section>
+      <section><h3>História</h3>${rows ? `<div class="htabwrap"><table class="htab"><thead><tr><th>Kedy</th><th>Plán</th><th>Výkon</th><th class="r">Objem</th><th class="r">1RM</th></tr></thead><tbody>${rows}</tbody></table></div>` : '<p class="hint">Zatiaľ žiadne zápisy.</p>'}</section>
       <label class="stepset">Krok váhy pre návrhy <select id="step-select" data-step="${esc(k)}">${STEP_OPTIONS.map((v) => `<option value="${v}" ${v === step ? 'selected' : ''}>${fmtKg(v)} kg</option>`).join('')}${STEP_OPTIONS.includes(step) ? '' : `<option selected value="${step}">${fmtKg(step)} kg</option>`}</select></label>
-      <section><h3>Poznámky</h3><div class="notes">${notes.length ? notes.map(([who, txt]) => `<div class="note"><span class="who">${esc(who)}</span>${esc(txt)}</div>`).join('') : '<div class="note">Zatiaľ žiadne.</div>'}</div></section>
     </aside>`;
   }
 
@@ -1096,6 +1158,7 @@
         await saveCell(c, p.w, cell.day.n, cell.e.col, { sets: val('sets'), weight: val('weight'), rpe: val('rpe'), note: val('note') });
         break;
       }
+      case 'dm': if (state.drawer) { state.drawer.m = t.dataset.m; render(); } break;
       case 'ex': state.drawer = { kind: 'ex', key: t.dataset.r }; state.pop = null; render(); loadHistory(c); break;
       case 'body': state.drawer = { kind: 'body' }; state.pop = null; render(); break;
       case 'close-drawer': state.drawer = null; render(); break;
