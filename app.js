@@ -9,7 +9,7 @@
   const RPE_VALUES = ['6', '7', '7.5', '8', '8.5', '9', '9.5', '10'];
   const HISTORY_TTL = 24 * 60 * 60 * 1000;
   const C = window.FitkoCalc; // objem a progresia (calc.js)
-  const APP_VERSION = 14; // zvýš pri každej zmene (zobrazuje sa dole v apke)
+  const APP_VERSION = 15; // zvýš pri každej zmene (zobrazuje sa dole v apke)
   const LS = {
     config: 'fitko.config',
     plan: 'fitko.plan',
@@ -1044,8 +1044,8 @@
       const lastVol = last ? C.totalKg(C.volume(ex.name, last.planned, last.done)) : 0;
       return { ex, done, last, isDone: hasAny(done), gains, vol, lastVol };
     });
-    const totalVol = rows.reduce((a, r) => a + r.vol, 0);
-    return { rows, done: rows.filter((r) => r.isDone).length, gains: rows.flatMap((r) => r.gains), totalVol };
+    // Celkový objem tréningu zámerne nepočítame – objem má zmysel len pri cviku (spec 003).
+    return { rows, done: rows.filter((r) => r.isDone).length, gains: rows.flatMap((r) => r.gains) };
   }
 
   function renderSummary() {
@@ -1074,8 +1074,7 @@
       <div class="grab"></div>
       <div class="sheet-head"><h2>Tréning hotový 💪</h2><button class="icon-btn" data-action="close-sheet" aria-label="Zavrieť">${ICON.close}</button></div>
       <p>Týždeň ${week.n} · Deň ${day.n} · ${esc(formatDate(day.date))}</p>
-      <div class="tiles four">
-        <div class="tile"><div class="tile-v">${data.totalVol > 0 ? esc(C.formatVolume(data.totalVol)) : '–'}<small>${data.totalVol > 0 ? ' kg' : ''}</small></div><div class="tile-k">objem tréningu</div></div>
+      <div class="tiles">
         <div class="tile"><div class="tile-v">${data.done}<small>/${day.exercises.length}</small></div><div class="tile-k">cvikov</div></div>
         <div class="tile"><div class="tile-v">${data.gains.length}</div><div class="tile-k">zlepšení</div></div>
         <div class="tile"><div class="tile-v">${mins || '–'}<small>${mins ? ' min' : ''}</small></div><div class="tile-k">trvanie</div></div>
@@ -1202,6 +1201,8 @@
 
         <button class="btn" type="submit" style="margin-top:8px">${first ? 'Načítať plán' : 'Uložiť a načítať'}</button>
         ${first ? '' : `<button class="btn ghost" type="button" data-action="copy-setup">Skopírovať odkaz na nastavenie pre iný mobil</button>`}
+        ${hasWrite() ? `<button class="btn ghost" type="button" data-action="copy-coach">Skopírovať odkaz pre trénera</button>
+        <div class="hint">Pošli ho trénerovi – otvorí ním svoj panel (trener.html) a pridá si ťa medzi klientov. Prihlási sa svojím menom a heslom trénera, tvoje heslo odkaz neobsahuje.</div>` : ''}
       </form>
       <div class="app-version">Fitko · verzia ${APP_VERSION}</div>`;
   }
@@ -1427,6 +1428,13 @@
       case 'photos-upload':
         uploadPhotos();
         break;
+      case 'copy-coach': {
+        const link = new URL('trener.html', location.href).href.split('#')[0] + '#s=' + btoa(unescape(encodeURIComponent(state.config.scriptUrl)));
+        (navigator.clipboard ? navigator.clipboard.writeText(link) : Promise.reject())
+          .then(() => toast('Odkaz pre trénera skopírovaný'))
+          .catch(() => prompt('Skopíruj odkaz pre trénera:', link));
+        break;
+      }
       case 'copy-setup': {
         const payload = btoa(unescape(encodeURIComponent(JSON.stringify(state.config))));
         const link = `${location.origin}${location.pathname}#setup=${payload}`;

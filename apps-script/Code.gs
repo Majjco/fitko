@@ -53,6 +53,9 @@ const PHOTO_SHEET = 'Fotky';
 // Nastavenia trénerovho portálu (cieľový rast objemu, kroky váhy pri cvikoch).
 const SETTINGS_SHEET = 'Fitko nastavenia';
 
+// Verzia skriptu – portál podľa nej vie, čo skript podporuje (3 = nový cvik pri odoslaní týždňa).
+const SCRIPT_VERSION = 3;
+
 function doGet(e) {
   try {
     const p = (e && e.parameter) || {};
@@ -82,7 +85,7 @@ function doGet(e) {
       .filter(function (s) { return s.getSheetId() !== sheet.getSheetId() && looksLikePlan_(s); })
       .map(function (s) { return s.getName(); });
 
-    return json_({ ok: true, sheet: sheet.getName(), history: history, rows: rows, weights: readWeights_(ss), photos: readPhotos_(ss), settings: readSettings_(ss), role: role, title: ss.getName() });
+    return json_({ ok: true, sheet: sheet.getName(), history: history, rows: rows, weights: readWeights_(ss), photos: readPhotos_(ss), settings: readSettings_(ss), role: role, title: ss.getName(), version: SCRIPT_VERSION });
   } catch (err) {
     return json_({ ok: false, error: String(err) });
   }
@@ -189,7 +192,8 @@ function coachOp_(ss, body) {
 // Návrh ďalšieho týždňa: bez `target` najprv naplánuje týždeň kópiou (copyWeek_ – najbližší
 // prázdny týždeň alebo nový blok), potom do neho zapíše PLANNED hodnoty z náhľadu.
 // Opakovanie po čiastočnom zlyhaní pošle `target` a len neúspešné riadky.
-// rows: [{ day, col, expect, fields: { sets, weight, rpe, note } }]
+// rows: [{ day, col, expect, fields: { name?, sets, weight, rpe, note } }]
+// Nový cvik: expect '' a fields.name (bunka názvu musí byť prázdna). Vynechanie: všetky polia ''.
 function applyWeek_(sheet, b) {
   let week = Number(b.target);
   let created = false;
@@ -212,7 +216,10 @@ function applyWeek_(sheet, b) {
         return { day: r.day, col: r.col, ok: false, error: 'Cvik v tabuľke je iný („' + current + '“)' };
       }
       const f = r.fields || {};
-      ['sets', 'weight', 'rpe', 'note'].forEach(function (k) {
+      if (f.name === '' && sheet.getRange(row, col + 5, 1, 4).getDisplayValues()[0].join('').trim()) {
+        return { day: r.day, col: r.col, ok: false, error: 'Klient už tento cvik zapísal – nedá sa vynechať' };
+      }
+      ['name', 'sets', 'weight', 'rpe', 'note'].forEach(function (k) {
         if (f[k] === undefined) return;
         const cell = sheet.getRange(row, col + PLAN_OFFSETS[k]);
         cell.setNumberFormat('@');

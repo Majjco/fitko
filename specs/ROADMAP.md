@@ -11,10 +11,9 @@ apka funkčná.
 |---|---|---|---|---|
 | — | Súčasný stav (baseline) | všetci | hotové | [001](001-fitko-baseline/spec.md) |
 | A | Návrh ďalšieho týždňa (objem, +X % progresia, vloženie jedným klikom) | tréner | hotové (v14), čaká na test s trénerom | [002](002-next-week-suggestions/spec.md) |
-| B | Trénerský dashboard (grafy všetkých cvikov naprieč blokmi, objem, dochádzka, váha, fotky) | tréner | čaká | — |
+| B+D | **Trénerov panel** – zoznam klientov, týždne vedľa seba ako v Exceli, insighty, plánovanie ďalšieho týždňa na tej istej ploche (nahrádza záložky) | tréner | hotové (v15), čaká na nasadenie skriptu | [003](003-coach-panel/spec.md) |
 | C | Redizajn klientskej apky (vzhľad, pauzy medzi sériami, proaktívne tipy) | klient | čaká | — |
-| D | Plánovanie bez Excelu (celé bloky, šablóny, presúvanie cvikov) | tréner | čaká | — |
-| E | Viac klientov v jednom portáli | tréner | čaká | — |
+| E | Viac klientov – **zoznam klientov hotový** (každý klient pošle odkaz); zostáva jeden skript pod trénerovým účtom namiesto skriptu u každého klienta | tréner | čiastočne | [003](003-coach-panel/spec.md) |
 
 ## Rozhodnutia
 
@@ -26,3 +25,6 @@ apka funkčná.
   bude treba doplniť constitution).
 - 2026-11-28: Hlavná miera záťaže je **objem** = série × opakovania × kg. Návrh cieli na +5 %
   objemu týždenne (nastaviteľné 0–10 %); pri vysokom RPE alebo nezvládnutí sa nezvyšuje.
+- 2026-11-28: Portál so záložkami sa zahadzuje. Nový panel = jedna plocha ako trénerov Excel
+  (cviky × týždne), insighty a nový týždeň ako upraviteľný stĺpec. Prototyp:
+  `specs/003-coach-panel/prototype.html`.

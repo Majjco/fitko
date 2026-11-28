@@ -13,8 +13,8 @@ takže ich tréner vidí v tabuľke ako predtým.
 - Pri každom cviku: **plán od trénera a minulý výkon pod sebou** (série, váha, RPE), poznámka trénera,
   tlačidlo **„Ako minule“** (vyplní série a váhu z minula) a pri váhe živé porovnanie **↑ +5 kg / ↓ −2,5 kg oproti minule**
 - Supersety (`CVIK A + CVIK B`) – jedno políčko ako v tabuľke, napr. `2x8 a 2x9`, RPE `8 a 7`
-- **Súhrn po tréningu**: počet cvikov, trvanie, zlepšenia oproti minule a **objem** (série × opakovania × kg)
-  celého tréningu aj každého cviku so zmenou v % oproti minule; zapíše `WORKOUT TIME` a `SESH RPE`
+- **Súhrn po tréningu**: počet cvikov, trvanie, zlepšenia oproti minule a **objem** každého cviku
+  (série × opakovania × kg) so zmenou v % oproti minule; zapíše `WORKOUT TIME` a `SESH RPE`
 - **Graf progresu** váhy pri každom cviku – aj zo starších blokov (napr. MESOCYCLE 1.0)
 - **Ranná váha**: na úvodnej obrazovke zapíšeš dnešnú váhu, vidíš trend a 7-dňový priemer.
   Ukladá sa do záložky **„Váha“** v tej istej tabuľke (skript ju založí sám pri prvom zápise).
@@ -25,28 +25,33 @@ takže ich tréner vidí v tabuľke ako predtým.
 - Funguje **offline** – keď vo fitku nie je signál, zápisy počkajú a odošlú sa neskôr
 - Dá sa pridať na plochu ako appka (iPhone: Zdieľať → Pridať na plochu)
 
-## Trénerov portál (voliteľný)
+## Trénerov panel (voliteľný)
 
-Na adrese `trener.html` je portál pre trénera nad **tou istou tabuľkou** – čo v ňom zmení, je hneď
-v tabuľke a naopak, takže môže kľudne ďalej používať aj Excel.
+Na adrese `trener.html` je panel pre trénera nad **tými istými tabuľkami** – čo v ňom zmení, je hneď
+v tabuľke klienta a naopak, takže môže kľudne ďalej používať aj Excel.
 
-- **Progres** – všetky cviky × týždne v jednej tabuľke (zapísané váhy klienta, RPE, trend), klik na cvik = graf;
-  prepínač **Váha / Objem**
-- **Návrh ďalšieho týždňa** – na poslednom naplánovanom týždni tlačidlo „Navrhnúť ďalší týždeň“. Pri každom
-  cviku ukáže, čo klient odcvičil, jeho objem a návrh na ďalší týždeň tak, aby objem stúpol o cieľové %
-  (predvolene 5 %) – ak klient cvik zvládol a RPE nebolo nad plánom. Pri vysokom RPE ponechá, pri 2× po sebe
-  nezvládnutých opakovaniach zníži váhu. Pri každom návrhu je dôvod a alternatívy (+krok, +1 opakovanie,
-  +1 séria); tréner môže čokoľvek prepísať alebo ponechať a potom **jedným klikom vloží celý týždeň do
-  tabuľky**. Cieľové % a krok váhy pri cviku (napr. jednoručky po 2 kg) sa ukladajú do záložky
-  **„Fitko nastavenia“**. Presné pravidlá: [`specs/002-next-week-suggestions/spec.md`](specs/002-next-week-suggestions/spec.md).
-- **Plán** – úprava cvikov (názov, série, váha, RPE, poznámka), pridanie/odobratie cviku,
-  „Naplánovať ďalší týždeň“ (skopíruje plán do najbližšieho prázdneho týždňa a posunie dátumy o 7 dní;
-  keď prázdny týždeň nie je, skopíruje celý blok pod posledný)
-- **Klient** – ranná váha, fotky progresu, poznámky klienta k cvikom
+- **Moji klienti** – karty klientov: koľko tréningov tento týždeň odcvičil, kedy naposledy, ranná váha
+  a upozornenia (cviky klesajú / stagnujú, rastie únava, nové poznámky, dni bez tréningu).
+  Kto potrebuje pozornosť, je prvý.
+- **Panel klienta – jedna plocha ako v Exceli**: riadky = cviky po dňoch, stĺpce = týždne bloku.
+  V bunke váha, série × opakovania, RPE a **objem cviku** (série × opakovania × kg) so zmenou oproti
+  minulému týždňu. Pri cviku trend bloku (↑ ide hore / → stagnuje / ↓ klesá, únava), poznámky klienta
+  aj trénera na klik, klik na cvik = graf váhy a objemu aj zo starších blokov.
+- Hore **súhrn**: tréningy tento týždeň, ranná váha s vývojom, fotky progresu (detail v bočnom paneli).
+- **+ Pridať týždeň** – vedľa posledného týždňa pribudne nový stĺpec predvyplnený návrhom
+  (+5 % objemu, ak klient cvik zvládol a RPE nebolo nad plánom; pri vysokom RPE ponechá, pri
+  2× nezvládnutých opakovaniach zníži váhu) alebo kópiou. Tréner prepisuje čísla, pridá alebo
+  vynechá cvik a **Odoslať klientovi** zapíše celý týždeň do tabuľky (dátumy +7 dní).
+  Rozpracovaný týždeň ostane uložený v prehliadači. Cieľ % a krok váhy pri cviku sa ukladajú do
+  záložky „Fitko nastavenia“. Pravidlá: [`specs/002-next-week-suggestions/spec.md`](specs/002-next-week-suggestions/spec.md),
+  panel: [`specs/003-coach-panel/spec.md`](specs/003-coach-panel/spec.md).
+- Svetlé bunky (plán, ktorý klient ešte necvičil) sa dajú upraviť priamo kliknutím.
 
-Prístup: v `Code.gs` nastav `COACH_USER` a `COACH_PASS` a trénerovi pošli odkaz
-`https://<github-meno>.github.io/fitko/trener.html#s=<base64 URL skriptu>` + meno a heslo.
-Tréner smie meniť len PLANNED stĺpce; cvik, ktorý už klient zapísal, sa nedá odstrániť.
+**Pridanie klienta:** klient v apke dá *Nastavenia → Skopírovať odkaz pre trénera* a pošle ho
+trénerovi. Tréner ho otvorí, prvýkrát sa prihlási (meno a heslo trénera) a klient pribudne do
+zoznamu. V `Code.gs` každého klienta musia byť nastavené `COACH_USER` a `COACH_PASS` – keď sú
+u všetkých klientov rovnaké, tréner sa prihlasuje len raz. Tréner smie meniť len PLANNED stĺpce;
+cvik, ktorý už klient zapísal, sa nedá odstrániť.
 
 ## Ako to funguje
 
@@ -118,8 +123,8 @@ takže ho posielaj len sebe.
 |---|---|
 | `index.html`, `styles.css`, `app.js` | celá apka (bez build kroku, čistý JS) |
 | `calc.js` | výpočet objemu a návrh progresie – spoločný pre apku aj portál |
-| `trener.html`, `coach.js`, `coach.css` | trénerov portál |
-| `tests/` | testy výpočtov: `node --test tests/*.test.js` |
+| `trener.html`, `coach.js`, `coach.css` | trénerov panel |
+| `tests/` | testy výpočtov: `node --test tests/*.test.js`; `tests/e2e/` – testy v prehliadači s podvrhnutým Apps Scriptom (Playwright, `python3 -m http.server 8765` v koreni repa) |
 | `specs/`, `.specify/` | špecifikácie (spec-driven development cez GitHub Spec Kit) |
 | `sw.js`, `manifest.webmanifest`, `icons/` | offline režim a inštalácia na plochu |
 | `apps-script/Code.gs` | skript pre zápis do Google tabuľky |

@@ -206,6 +206,9 @@ odkaz na nastavenie a otvoriť ho na inom zariadení.
 
 ---
 
+> **Nahradené** (US8, US9, FR-023–026): trénerov portál so záložkami bol v apke v15 nahradený
+> panelom zo [spec 003](../003-coach-panel/spec.md). Popis nižšie platí pre verziu 13.
+
 ### User Story 8 – Tréner: prehľad progresu klienta (Priority: P2)
 
 Tréner sa v portáli prihlási menom a heslom a vidí všetky cviky × týždne aktuálneho bloku so

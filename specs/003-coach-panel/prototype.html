@@ -1,0 +1,881 @@
+<title>Fitko Tréner – prototyp panelu</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@600;700&display=swap">
+<style>
+/* Plocha ako trénerov Excel: pevný stĺpec cvikov, týždne vedľa seba, posledný stĺpec = rozpracovaný týždeň. */
+:root {
+  --bg: #f3f5f0; --surface: #ffffff; --surface-2: #eef1ea; --line: #dde2d6; --fg: #14180f; --muted: #646d5e;
+  --accent: #c8f53c; --accent-ink: #141a03; --accent-line: #7a9a12; --draft: #f7fbe6;
+  --up: #1b7f3b; --up-bg: #e4f5e8; --down: #c03434; --down-bg: #fbe7e5; --same: #646d5e;
+  --warn: #9a5b00; --warn-bg: #fff2d6; --note: #b26a00;
+  --head: "Space Grotesk", "Inter", system-ui, sans-serif;
+  --sans: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0d0f12; --surface: #161a20; --surface-2: #1e232b; --line: #2a303a; --fg: #f2f4f7; --muted: #8d96a5;
+  --accent: #c8f53c; --accent-ink: #141a03; --accent-line: #c8f53c; --draft: #1a2012;
+  --up: #4ade80; --up-bg: #132a1b; --down: #f87171; --down-bg: #2e1616; --same: #8d96a5;
+  --warn: #fbbf24; --warn-bg: #2b2210; --note: #ffb547; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #0d0f12; --surface: #161a20; --surface-2: #1e232b; --line: #2a303a; --fg: #f2f4f7; --muted: #8d96a5;
+  --accent: #c8f53c; --accent-ink: #141a03; --accent-line: #c8f53c; --draft: #1a2012;
+  --up: #4ade80; --up-bg: #132a1b; --down: #f87171; --down-bg: #2e1616; --same: #8d96a5;
+  --warn: #fbbf24; --warn-bg: #2b2210; --note: #ffb547; color-scheme: dark; }
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font-family: var(--sans); font-size: 14px; line-height: 1.45; font-variant-numeric: tabular-nums; }
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; padding: 0; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent-line); outline-offset: 2px; }
+.wrap { max-width: 1400px; margin: 0 auto; padding-block: 18px 120px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: grid; gap: 16px; }
+.proto { font-size: 12px; color: var(--muted); display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.proto b { color: var(--fg); }
+.proto button { color: var(--accent-line); font-weight: 700; }
+h1, h2, h3 { font-family: var(--head); margin: 0; letter-spacing: -0.01em; }
+
+/* Zoznam klientov */
+.clients-head { display: flex; align-items: end; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.clients-head h1 { font-size: 30px; }
+.clients-head p { margin: 2px 0 0; color: var(--muted); }
+.clients { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.ccard { text-align: left; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 16px; display: grid; gap: 10px; min-width: 0; }
+.ccard:hover { border-color: var(--accent-line); }
+.ccard-top { display: flex; gap: 12px; align-items: center; }
+.avatar { width: 42px; height: 42px; border-radius: 50%; background: var(--surface-2); display: grid; place-items: center; font-weight: 800; font-family: var(--head); flex: none; }
+.ccard-name { font-weight: 800; font-size: 17px; }
+.ccard-sub { color: var(--muted); font-size: 13px; }
+.ccard-stats { display: flex; gap: 16px; font-size: 13px; color: var(--muted); }
+.ccard-stats b { color: var(--fg); font-size: 15px; }
+.flags { display: flex; flex-wrap: wrap; gap: 6px; }
+.flag { font-size: 12px; font-weight: 700; padding: 3px 8px; border-radius: 99px; background: var(--surface-2); color: var(--muted); }
+.flag.up { background: var(--up-bg); color: var(--up); }
+.flag.down { background: var(--down-bg); color: var(--down); }
+.flag.warn { background: var(--warn-bg); color: var(--warn); }
+.add-client { border-style: dashed; color: var(--muted); place-content: center; text-align: center; min-height: 150px; }
+
+/* Panel klienta */
+.phead { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.back { width: 40px; height: 40px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); display: grid; place-items: center; font-size: 20px; flex: none; }
+.phead h1 { font-size: 26px; }
+.phead .sub { color: var(--muted); }
+.snap { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.tile { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; display: grid; gap: 2px; min-width: 0; text-align: left; }
+.tile-k { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.tile-v { font-family: var(--head); font-size: 24px; font-weight: 700; }
+.tile-v small { font-family: var(--sans); font-size: 13px; color: var(--muted); font-weight: 600; }
+.tile-s { font-size: 12px; color: var(--muted); }
+.tile-s .up { color: var(--up); font-weight: 700; } .tile-s .down { color: var(--down); font-weight: 700; }
+.spark { width: 100%; height: 26px; display: block; margin-top: 2px; }
+.spark path { fill: none; stroke: var(--accent-line); stroke-width: 2; }
+.spark circle { fill: var(--accent-line); }
+.insights { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.insights .lbl { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-right: 4px; }
+.ins { border: 1px solid var(--line); background: var(--surface); border-radius: 99px; padding: 6px 12px; font-weight: 600; font-size: 13px; display: inline-flex; gap: 6px; align-items: center; }
+.ins b { font-weight: 800; }
+.ins.up b { color: var(--up); } .ins.down b { color: var(--down); } .ins.same b { color: var(--same); } .ins.warn b { color: var(--warn); } .ins.note b { color: var(--note); }
+.ins.on { border-color: var(--fg); box-shadow: inset 0 0 0 1px var(--fg); }
+
+/* Mriežka */
+.toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.toolbar .spacer { flex: 1; }
+.btn { border-radius: 10px; padding: 10px 16px; font-weight: 700; background: var(--surface); border: 1px solid var(--line); }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+.btn.sm { padding: 6px 10px; font-size: 13px; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--surface); }
+.seg button { padding: 7px 12px; font-weight: 600; color: var(--muted); font-size: 13px; }
+.seg button.on { background: var(--surface-2); color: var(--fg); }
+.gridwrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; -webkit-overflow-scrolling: touch; }
+table.g { border-collapse: separate; border-spacing: 0; min-width: 100%; }
+.g th, .g td { border-bottom: 1px solid var(--line); padding: 0; vertical-align: top; text-align: left; }
+.g thead th { position: sticky; top: 0; background: var(--surface); z-index: 2; padding: 10px 12px; font-size: 12px; color: var(--muted); font-weight: 700; white-space: nowrap; }
+.g thead th b { display: block; color: var(--fg); font-family: var(--head); font-size: 15px; }
+.g .ex { position: sticky; left: 0; z-index: 1; background: var(--surface); min-width: 230px; max-width: 260px; padding: 10px 12px; border-right: 1px solid var(--line); }
+.g thead .ex { z-index: 3; }
+.exname { font-weight: 700; text-align: left; display: block; }
+.exname:hover { text-decoration: underline; text-underline-offset: 3px; }
+.exmeta { display: flex; gap: 8px; align-items: center; margin-top: 4px; font-size: 12px; color: var(--muted); }
+.trend { font-weight: 800; font-size: 12px; padding: 1px 7px; border-radius: 99px; white-space: nowrap; }
+.trend.up { color: var(--up); background: var(--up-bg); } .trend.down { color: var(--down); background: var(--down-bg); } .trend.same { color: var(--same); background: var(--surface-2); }
+.dayrow th { background: var(--surface-2); padding: 7px 12px; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.dayrow th.ex { background: var(--surface-2); }
+.g td.cell { min-width: 118px; padding: 9px 26px 9px 12px; position: relative; }
+.cell .w { font-weight: 800; font-size: 15px; }
+.cell .s { font-size: 12px; color: var(--muted); }
+.cell.up .w { color: var(--up); } .cell.down .w { color: var(--down); }
+.v { font-size: 12px; color: var(--muted); margin-top: 2px; white-space: nowrap; }
+.v b { color: var(--fg); font-weight: 700; }
+.v .p { font-weight: 800; }
+.v .p.up { color: var(--up); } .v .p.down { color: var(--down); }
+.legend-inline { font-size: 12px; color: var(--muted); }
+.legend-inline b { color: var(--fg); }
+.cell.plan { opacity: .55; font-style: italic; }
+.cell.plan .w { font-weight: 600; }
+.cell.empty { background: repeating-linear-gradient(135deg, transparent 0 6px, var(--surface-2) 6px 7px); }
+.notebtn { position: absolute; top: 7px; right: 7px; width: 18px; height: 18px; border-radius: 5px; background: var(--warn-bg); color: var(--note); font-size: 11px; font-weight: 800; display: grid; place-items: center; }
+.notebtn.coach { background: var(--surface-2); color: var(--muted); right: 28px; }
+tr.hl .ex, tr.hl td { background-image: linear-gradient(var(--warn-bg), var(--warn-bg)); }
+tr.dim { opacity: .35; }
+/* Rozpracovaný týždeň */
+.g .draft { background: var(--draft); border-left: 2px solid var(--accent-line); min-width: 190px; }
+.g thead th.draft { background: var(--draft); }
+.dcell { padding: 7px 10px; display: grid; gap: 4px; }
+.dline { display: flex; gap: 4px; align-items: center; }
+.dcell input { width: 100%; min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 7px; padding: 5px 6px; font: inherit; font-size: 13px; color: var(--fg); }
+.dcell input.wt { font-weight: 800; font-size: 14px; }
+.dcell input.chg { border-color: var(--accent-line); }
+.dcell .unit { font-size: 12px; color: var(--muted); }
+.why { font-size: 11px; color: var(--muted); display: flex; gap: 6px; align-items: baseline; }
+.why .d { font-weight: 800; }
+.why .d.up { color: var(--up); } .why .d.down { color: var(--down); }
+.why.rev { color: var(--warn); }
+.addex { color: var(--accent-line); font-weight: 700; font-size: 13px; padding: 8px 10px; }
+.nameinput { width: 100%; font-weight: 700; }
+.draft-head { display: grid; gap: 4px; }
+.draft-head .seg button { padding: 3px 8px; font-size: 11px; }
+
+/* Spodná lišta */
+.bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; background: var(--surface); border-top: 1px solid var(--line); padding: 12px max(16px, env(safe-area-inset-right, 0px)) calc(12px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); }
+.bar-in { max-width: 1400px; margin: 0 auto; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.bar-in .info { flex: 1; min-width: 200px; }
+.bar-in .info b { font-family: var(--head); font-size: 16px; }
+.bar-in .info span { color: var(--muted); }
+
+/* Popover a bočný panel */
+.pop { position: fixed; z-index: 40; max-width: 300px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px; box-shadow: 0 10px 30px rgba(0,0,0,.25); display: grid; gap: 8px; font-size: 13px; }
+.pop .who { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.drawer-bg { position: fixed; inset: 0; background: rgba(0,0,0,.35); z-index: 30; }
+.drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(440px, 100%); background: var(--surface); z-index: 31; padding: calc(18px + env(safe-area-inset-top, 0px)) max(18px, env(safe-area-inset-right, 0px)) 18px 18px; overflow-y: auto; display: grid; gap: 14px; align-content: start; border-left: 1px solid var(--line); }
+.drawer-head { display: flex; align-items: center; gap: 10px; }
+.drawer-head h2 { flex: 1; font-size: 20px; }
+.chart { width: 100%; height: auto; display: block; }
+.chart .grid { stroke: var(--line); }
+.chart .axis { fill: var(--muted); font-size: 10px; }
+.chart .l1 { fill: none; stroke: var(--accent-line); stroke-width: 2.5; }
+.chart .l2 { fill: none; stroke: var(--muted); stroke-width: 1.5; stroke-dasharray: 4 3; }
+.chart .dot { fill: var(--accent-line); }
+.legend { display: flex; gap: 14px; font-size: 12px; color: var(--muted); }
+.legend i { display: inline-block; width: 14px; height: 3px; background: var(--accent-line); vertical-align: middle; margin-right: 5px; }
+.legend i.l2 { background: var(--muted); }
+.notes { display: grid; gap: 8px; }
+.note { background: var(--surface-2); border-radius: 10px; padding: 8px 10px; }
+.note .who { font-size: 11px; color: var(--muted); font-weight: 700; }
+.toast { position: fixed; left: 50%; bottom: 90px; transform: translateX(-50%); background: var(--fg); color: var(--bg); padding: 10px 16px; border-radius: 10px; font-weight: 700; z-index: 50; max-width: calc(100% - 32px); }
+@media (max-width: 820px) {
+  .snap { grid-template-columns: minmax(0, 1fr); }
+  .g .ex { min-width: 170px; }
+}
+@media (prefers-reduced-motion: no-preference) { tr { transition: opacity .2s; } }
+</style>
+<div class="wrap" id="app"></div>
+<div id="layer"></div>
+<script>/* Fitko – výpočty objemu a návrh progresie (spoločné pre apku aj trénerov portál).
+ * Čisté funkcie bez DOM: v prehliadači ako window.FitkoCalc, v Node cez require (testy).
+ * Pravidlá: specs/002-next-week-suggestions/spec.md */
+(function (root) {
+  'use strict';
+
+  const NUM = '\\d+(?:[.,]\\d+)?';
+  const toNum = (s) => parseFloat(String(s).replace(',', '.'));
+  const round2 = (n) => Math.round(n * 100) / 100;
+
+  // ---------------------------------------------------------------------------
+  // Parsovanie
+  // ---------------------------------------------------------------------------
+  const splitParts = (name) => String(name || '').split(/\s+\+\s+/).map((p) => p.trim()).filter(Boolean);
+
+  // Hodnoty supersetu „2x8 a 2x9“ -> ['2x8', '2x9']. Jedna hodnota pri sériách/RPE platí
+  // pre všetky časti (fill), pri váhe len pre prvú (ako graf v apke).
+  function splitValues(str, n, fill) {
+    const s = String(str || '').trim();
+    if (n <= 1) return [s];
+    const parts = s ? s.split(/\s+a\s+/i).map((p) => p.trim()) : [];
+    if (parts.length <= 1) return Array.from({ length: n }, (_, i) => (i === 0 || fill ? parts[0] || '' : ''));
+    return Array.from({ length: n }, (_, i) => parts[i] || '');
+  }
+
+  /*
+   * Série -> { sets: [{ min, max }], extra } | { ok: true } | null
+   * „2x10“, „2 × 10“, „3x8-10“, „10, 9, 8“, „10/9/8“, „2x10 + 1x8“, „1x20 BOTH“
+   */
+  function parseSets(str) {
+    const s = String(str || '').trim();
+    if (!s) return null;
+    if (/^ok\.?$/i.test(s)) return { ok: true };
+    const sets = [];
+    let rest = s.replace(/(\d+)\s*[x×]\s*(\d+)(?:\s*[-–]\s*(\d+))?/gi, (_, n, a, b) => {
+      const min = +a, max = b ? +b : +a;
+      for (let i = 0; i < +n; i++) sets.push({ min: Math.min(min, max), max: Math.max(min, max) });
+      return ' ';
+    });
+    rest = rest.replace(/(\d+)(?:\s*[-–]\s*(\d+))?/g, (_, a, b) => {
+      const min = +a, max = b ? +b : +a;
+      sets.push({ min: Math.min(min, max), max: Math.max(min, max) });
+      return ' ';
+    });
+    if (!sets.length || sets.length > 20) return null;
+    const extra = rest.replace(/[+,;]/g, ' ').replace(/\s+/g, ' ').replace(/^[\s/]+$/, '').trim();
+    return { sets, extra };
+  }
+
+  // „8“ -> [8, 8]; „7-8“ -> [7, 8]; „7,5“ -> [7.5, 7.5]
+  function parseRpe(str) {
+    const m = String(str || '').match(new RegExp(`(${NUM})(?:\\s*[-–]\\s*(${NUM}))?`));
+    if (!m) return null;
+    const a = toNum(m[1]), b = m[2] ? toNum(m[2]) : a;
+    if (!(a > 0 && a <= 10 && b > 0 && b <= 10)) return null;
+    return [Math.min(a, b), Math.max(a, b)];
+  }
+
+  // „47,5“ -> { lo: 47.5, hi: 47.5, comma: true }; „40-45 kg“ -> rozsah; „CHOOSE“ -> { choose }
+  function parseWeight(str) {
+    const s = String(str || '').trim();
+    if (!s) return null;
+    if (/choose|podľa seba/i.test(s)) return { choose: true };
+    const m = s.match(new RegExp(`^(${NUM})(?:\\s*[-–]\\s*(${NUM}))?\\s*(?:kg)?$`, 'i'));
+    if (m) {
+      const lo = toNum(m[1]), hi = m[2] ? toNum(m[2]) : lo;
+      return { lo: Math.min(lo, hi), hi: Math.max(lo, hi), comma: s.includes(','), exact: true };
+    }
+    const clean = s.replace(/\d+\s*[x×]\s*(?=\d)/gi, '');
+    const n = clean.match(new RegExp(NUM));
+    return n ? { lo: toNum(n[0]), hi: toNum(n[0]), comma: s.includes(','), exact: false } : null;
+  }
+
+  const hasAny = (f) => Boolean(f && (String(f.sets || '').trim() || String(f.weight || '').trim() || String(f.rpe || '').trim()));
+  const sum = (a) => a.reduce((x, y) => x + y, 0);
+
+  // ---------------------------------------------------------------------------
+  // Formátovanie
+  // ---------------------------------------------------------------------------
+  function fmtNum(n, comma) {
+    const s = String(round2(n));
+    return comma ? s.replace('.', ',') : s;
+  }
+  // Objem pre ľudí: 1350 -> „1 350“, 562.5 -> „562,5“
+  function formatVolume(v) {
+    const r = Math.round(v * 10) / 10;
+    const [i, d] = String(r).split('.');
+    return i.replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + (d ? ',' + d : '');
+  }
+  function formatPct(p) {
+    const r = Math.round(p * 1000) / 10;
+    if (r === 0) return '±0 %';
+    return `${r > 0 ? '+' : '−'}${String(Math.abs(r)).replace('.', ',')} %`;
+  }
+  const fmtKg = (n) => String(round2(n)).replace('.', ',');
+  function formatSets(count, min, max, extra) {
+    const reps = max > min ? `${min}-${max}` : `${min}`;
+    const ex = extra ? (extra.startsWith('/') ? extra : ' ' + extra) : '';
+    return `${count}x${reps}${ex}`;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Objem
+  // ---------------------------------------------------------------------------
+  // Opakovania odcvičených sérií; „Ok“ = podľa plánu (spodná hranica rozsahu).
+  function doneReps(doneSets, planSets) {
+    const d = parseSets(doneSets);
+    if (!d) return null;
+    if (d.ok) {
+      const p = parseSets(planSets);
+      return p && !p.ok ? p.sets.map((x) => x.min) : null;
+    }
+    return d.sets.map((x) => x.min);
+  }
+
+  // Objem jednej časti: { value, unit: 'kg' | 'opak.' } | null
+  function partVolume(doneSets, doneWeight, planSets, planWeight) {
+    const reps = doneReps(doneSets, planSets);
+    if (!reps) return null;
+    let w = parseWeight(doneWeight);
+    if (!w || w.choose) {
+      const pw = parseWeight(planWeight);
+      w = !String(doneWeight || '').trim() && pw && !pw.choose ? pw : null;
+    }
+    if (w && w.lo > 0) return { value: round2(sum(reps) * w.lo), unit: 'kg' };
+    return { value: sum(reps), unit: 'opak.' };
+  }
+
+  // Objem cviku po častiach (superset). planned/done = { sets, weight }.
+  function volume(name, planned, done) {
+    const n = Math.max(1, splitParts(name).length);
+    const ds = splitValues(done && done.sets, n, true), dw = splitValues(done && done.weight, n, false);
+    const ps = splitValues(planned && planned.sets, n, true), pw = splitValues(planned && planned.weight, n, false);
+    return Array.from({ length: n }, (_, i) => partVolume(ds[i], dw[i], ps[i], pw[i]));
+  }
+
+  // Súčet objemov v kg (časti v opakovaniach sa nesčítavajú).
+  function totalKg(vols) {
+    return sum((vols || []).filter((v) => v && v.unit === 'kg').map((v) => v.value));
+  }
+
+  // ---------------------------------------------------------------------------
+  // Návrh progresie
+  // ---------------------------------------------------------------------------
+  // Nezvládol klient plánované opakovania (alebo RPE 10)?
+  function missedPart(planSets, doneSets, doneRpe) {
+    const r = parseRpe(doneRpe);
+    if (r && r[1] >= 10) return true;
+    const p = parseSets(planSets), d = parseSets(doneSets);
+    if (!p || p.ok || !d || d.ok) return false;
+    if (d.sets.length < p.sets.length) return true;
+    return p.sets.some((s, i) => d.sets[i] && d.sets[i].min < s.min);
+  }
+  function missed(name, planned, done) {
+    if (!hasAny(done)) return false;
+    const n = Math.max(1, splitParts(name).length);
+    const ps = splitValues(planned.sets, n, true), ds = splitValues(done.sets, n, true), dr = splitValues(done.rpe, n, true);
+    return ps.some((_, i) => missedPart(ps[i], ds[i], dr[i]));
+  }
+
+  /*
+   * Návrh pre jednu časť cviku.
+   * in: { plan: { sets, weight, rpe }, done: { sets, weight, rpe }, prevMissed, step, pct }
+   * out: { sets, weight, rule, reason, review, base, proposed, alternatives }
+   */
+  function suggestPart(input) {
+    const plan = input.plan, done = input.done;
+    const step = input.step > 0 ? input.step : 2.5;
+    const pct = input.pct >= 0 ? input.pct : 0.05;
+    const planP = parseSets(plan.sets);
+    const planW = parseWeight(plan.weight);
+    const base = partVolume(done.sets, done.weight, plan.sets, plan.weight);
+    const planVol = partVolume(plan.sets, plan.weight, plan.sets, plan.weight);
+    const out = (o) => ({ sets: plan.sets, weight: plan.weight, review: false, base, proposed: planVol, alternatives: [], ...o });
+    const keep = (rule, reason, review, alternatives) => out({ rule, reason, review: Boolean(review), alternatives: alternatives || [] });
+
+    if (!hasAny(done)) return keep('R1', 'Bez zápisu – ponechané');
+    if (planW && planW.choose) {
+      const dw = parseWeight(done.weight);
+      const bits = [dw && dw.lo ? `minule ${fmtKg(dw.lo)} kg` : '', base ? `objem ${formatVolume(base.value)} ${base.unit}` : ''].filter(Boolean);
+      return keep('R2', `Váha podľa seba${bits.length ? ' – ' + bits.join(', ') : ''}`);
+    }
+
+    const doneP = parseSets(done.sets);
+    if (!planP || planP.ok || !doneP || (doneP.ok && !planP)) return keep('R0', 'Nedá sa vyhodnotiť – skontroluj', true);
+    const reps = doneP.ok ? planP.sets.map((s) => s.min) : doneP.sets.map((s) => s.min);
+
+    // Odcvičená váha; chýba -> podľa plánu; ani tam nie je -> vlastná váha.
+    let dwP = parseWeight(done.weight);
+    if (dwP && dwP.choose) dwP = null;
+    if (!dwP && String(done.weight || '').trim()) return keep('R0', 'Nedá sa vyhodnotiť – skontroluj', true);
+    if (!dwP && planW && planW.lo > 0) dwP = planW;
+    const bodyweight = !dwP || !(dwP.lo > 0);
+    const dw = bodyweight ? 0 : dwP.lo;
+    const comma = Boolean((planW && planW.comma) || (dwP && dwP.comma));
+
+    const rpeDone = parseRpe(done.rpe);
+    const rpePlan = parseRpe(plan.rpe);
+    const rpeTxt = (r) => fmtKg(r[0]) + (r[1] > r[0] ? '–' + fmtKg(r[1]) : '');
+
+    // R3: nezvládnuté opakovania alebo RPE 10
+    if (missedPart(plan.sets, done.sets, done.rpe)) {
+      const why = rpeDone && rpeDone[1] >= 10 ? 'RPE 10' : `nezvládnuté opakovania (${reps.join(', ')} z plánu ${planP.sets.map((s) => s.min).join(', ')})`;
+      if (!input.prevMissed) return keep('R3', `${cap(why)} – ponechané; ak sa to zopakuje, navrhne sa ľahšia váha`);
+      if (bodyweight || dw - step <= 0 || !planW || !(planW.lo > 0)) return keep('R3', `2× po sebe ${why} – zníž záťaž ručne`, true);
+      const weight = planW.hi > planW.lo
+        ? `${fmtNum(planW.lo - step, comma)}-${fmtNum(planW.hi - step, comma)}`
+        : fmtNum(dw - step, comma);
+      const proposed = { value: round2(sum(planP.sets.map((s) => s.min)) * (dw - step)), unit: 'kg' };
+      return out({ weight, rule: 'R3', reason: `2× po sebe ${why} → −${fmtKg(step)} kg`, proposed });
+    }
+
+    // R4: ťažšie ako plán
+    if (rpePlan && rpeDone && rpeDone[1] > rpePlan[1]) {
+      return keep('R4', `RPE ${rpeTxt(rpeDone)} nad plánom ${rpeTxt(rpePlan)} → ponechané`);
+    }
+
+    // R5 / R6: cieľ objemu
+    const easy = rpePlan && rpeDone && rpeDone[1] <= rpePlan[0] - 1;
+    const tPct = easy ? pct * 2 : pct;
+    const rule = easy ? 'R5' : 'R6';
+    const head = easy
+      ? `Ľahké (RPE ${rpeTxt(rpeDone)} pri pláne ${rpeTxt(rpePlan)})`
+      : `Splnené${rpeDone ? ` pri RPE ${rpeTxt(rpeDone)}` : ''}`;
+
+    const S = planP.sets.length;
+    const uniform = planP.sets.every((s) => s.min === planP.sets[0].min && s.max === planP.sets[0].max);
+    const isRange = uniform && planP.sets[0].max > planP.sets[0].min;
+    const pMin = planP.sets[0].min, pMax = planP.sets[0].max;
+    const doneMin = Math.min(...reps);
+    // Základ: odcvičené opakovania, nad plán sa nepočítajú (aby sa váha zvyšovala aj vtedy).
+    const capReps = reps.map((r, i) => Math.min(r, (planP.sets[i] || planP.sets[planP.sets.length - 1]).max));
+    const baseVal = bodyweight ? sum(capReps) : sum(capReps) * dw;
+    if (!(baseVal > 0)) return keep('R0', 'Nedá sa vyhodnotiť – skontroluj', true);
+    const target = baseVal * (1 + tPct);
+    const unit = bodyweight ? 'opak.' : 'kg';
+
+    // Kandidáti: rovnaký počet sérií; váha +0/+1/+2 kroky; opakovania v rozsahu plánu.
+    const cands = [];
+    const add = (k, r, list) => {
+      const w = bodyweight ? 0 : dw + k * step;
+      const repsSum = list ? sum(list) : S * r;
+      cands.push({ k, r, value: round2(bodyweight ? repsSum : repsSum * w), w });
+    };
+    if (bodyweight) {
+      if (uniform) for (let r = Math.max(doneMin, pMin); r <= Math.max(doneMin, pMin) + 5; r++) add(0, r);
+    } else {
+      for (let k = 0; k <= 2; k++) {
+        if (uniform) {
+          for (let r = pMin; r <= pMax; r++) if (k > 0 || r >= Math.min(doneMin, pMax)) add(k, r);
+        } else add(k, null, planP.sets.map((s) => s.min));
+      }
+    }
+    const capPct = Math.max(2 * tPct, tPct + 0.05);
+    const ok = cands.filter((c) => c.value >= target - 1e-9).sort((a, b) => a.value - b.value || a.k - b.k);
+    const best = ok[0] && ok[0].value / baseVal - 1 <= capPct + 1e-9 ? ok[0] : null;
+
+    const weightFor = (k) => {
+      if (bodyweight) return plan.weight;
+      if (k === 0) {
+        const inPlan = planW && planW.lo > 0 && dw >= planW.lo && dw <= planW.hi;
+        return inPlan ? plan.weight : fmtNum(dw, comma);
+      }
+      if (planW && planW.hi > planW.lo) return `${fmtNum(planW.lo + k * step, comma)}-${fmtNum(planW.hi + k * step, comma)}`;
+      return fmtNum(dw + k * step, comma);
+    };
+    const setsFor = (c) => {
+      if (bodyweight && uniform && !isRange) return formatSets(S, c.r, null, planP.extra);
+      return plan.sets; // rozsah alebo nerovnomerné série ostávajú, ako ich napísal tréner
+    };
+    const describe = (c) => {
+      const bits = [];
+      if (c.k > 0) bits.push(`+${fmtKg(c.k * step)} kg`);
+      if (bodyweight && c.r != null) bits.push(`${S}×${c.r}`);
+      else if (isRange) bits.push(`cieľ ${S}×${c.r} opak.`);
+      return bits.join(', ') || 'rovnako';
+    };
+
+    // Alternatívy: ďalší kandidát, +1 opakovanie, +1 séria
+    const alts = [];
+    const pushAlt = (label, sets, weight, value) => {
+      if (alts.some((a) => a.sets === sets && a.weight === weight)) return;
+      alts.push({ label, sets, weight, value: round2(value), pct: value / baseVal - 1, unit });
+    };
+    for (const c of ok) {
+      if (best && c === best) continue;
+      if (c.value / baseVal - 1 > 0.25) break;
+      pushAlt(describe(c), setsFor(c), weightFor(c.k), c.value);
+      break;
+    }
+    if (uniform && !isRange) {
+      const r1 = Math.max(doneMin, pMin) + 1;
+      pushAlt('+1 opak.', formatSets(S, r1, null, planP.extra), weightFor(0), bodyweight ? S * r1 : S * r1 * dw);
+    }
+    if (uniform) {
+      const rr = isRange ? Math.min(Math.max(doneMin, pMin), pMax) : Math.max(doneMin, pMin);
+      pushAlt('+1 séria', formatSets(S + 1, pMin, isRange ? pMax : pMin, planP.extra), weightFor(0), bodyweight ? (S + 1) * rr : (S + 1) * rr * dw);
+    }
+
+    const baseObj = { value: round2(baseVal), unit };
+    if (!best) {
+      const first = ok[0];
+      const why = first
+        ? `najmenšie zvýšenie je ${formatPct(first.value / baseVal - 1)} (cieľ ${formatPct(tPct)})`
+        : `cieľ ${formatPct(tPct)} sa v rozsahu plánu nedá dosiahnuť`;
+      return keep(rule, `${head}, ale ${why} – vyber alternatívu`, true, alts.filter((a) => !(a.sets === plan.sets && a.weight === plan.weight)));
+    }
+    const sets = setsFor(best);
+    const weight = weightFor(best.k);
+    const proposed = { value: best.value, unit };
+    const reason = `${head} → cieľ ${formatPct(tPct)} objemu: ${describe(best)}`;
+    return out({ sets, weight, rule, reason, base: baseObj, proposed, alternatives: alts.filter((a) => !(a.sets === sets && a.weight === weight)) });
+  }
+
+  function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+
+  /*
+   * Návrh pre celý cvik (aj superset).
+   * ex: { name, planned: { sets, weight, rpe, note }, done: {...}, prevMissed, step, pct }
+   * out: { fields: { sets, weight, rpe, note }, rule, reason, review, parts: [{ name, base, proposed }], alternatives }
+   */
+  function suggest(ex) {
+    const parts = splitParts(ex.name);
+    const n = Math.max(1, parts.length);
+    const planned = ex.planned || {}, done = ex.done || {};
+    if (n === 1) {
+      const r = suggestPart({ plan: planned, done, prevMissed: ex.prevMissed, step: ex.step, pct: ex.pct });
+      return {
+        fields: { sets: r.sets, weight: r.weight, rpe: planned.rpe || '', note: planned.note || '' },
+        rule: r.rule, reason: r.reason, review: r.review,
+        parts: [{ name: ex.name, base: r.base, proposed: r.proposed }],
+        alternatives: r.alternatives.map((a) => ({ ...a, fields: { sets: a.sets, weight: a.weight } })),
+      };
+    }
+    const ps = splitValues(planned.sets, n, true), pw = splitValues(planned.weight, n, false), pr = splitValues(planned.rpe, n, true);
+    const ds = splitValues(done.sets, n, true), dw = splitValues(done.weight, n, false), dr = splitValues(done.rpe, n, true);
+    const res = parts.map((p, i) => suggestPart({
+      plan: { sets: ps[i], weight: pw[i], rpe: pr[i] },
+      done: { sets: ds[i], weight: dw[i], rpe: dr[i] },
+      prevMissed: ex.prevMissed, step: ex.step, pct: ex.pct,
+    }));
+    const joinVals = (vals, orig, origVals) => {
+      if (vals.every((v, i) => v === origVals[i])) return orig || '';
+      const trimmed = vals.slice();
+      while (trimmed.length > 1 && !trimmed[trimmed.length - 1]) trimmed.pop();
+      return trimmed.join(' a ');
+    };
+    const order = ['R0', 'R3', 'R4', 'R1', 'R2', 'R6', 'R5'];
+    const rule = res.map((r) => r.rule).sort((a, b) => order.indexOf(a) - order.indexOf(b))[0];
+    return {
+      fields: {
+        sets: joinVals(res.map((r) => r.sets), planned.sets, ps),
+        weight: joinVals(res.map((r) => r.weight), planned.weight, pw),
+        rpe: planned.rpe || '',
+        note: planned.note || '',
+      },
+      rule,
+      reason: res.map((r, i) => `${cap(parts[i].toLowerCase())}: ${r.reason}`).join(' · '),
+      review: res.some((r) => r.review),
+      parts: res.map((r, i) => ({ name: parts[i], base: r.base, proposed: r.proposed })),
+      alternatives: [],
+    };
+  }
+
+  const api = {
+    splitParts, splitValues, parseSets, parseRpe, parseWeight, hasAny,
+    volume, totalKg, missed, suggest, suggestPart,
+    formatVolume, formatPct, formatSets, fmtKg,
+  };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+  else root.FitkoCalc = api;
+})(this);
+</script>
+<script>
+(function () {
+  'use strict';
+  var C = window.FitkoCalc;
+  var esc = function (s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); };
+  var kg = function (n) { return String(Math.round(n * 100) / 100).replace('.', ','); };
+  var cap = function (s) { s = String(s || '').toLowerCase(); return s.charAt(0).toUpperCase() + s.slice(1); };
+  var nice = function (name) { return C.splitParts(name).map(cap).join(' + '); };
+  var prettySets = function (s) { return String(s || '').replace(/\s*[xX×]\s*/g, '×'); };
+
+  // ---------------- Ukážkové dáta (týždne T1–T4, T4 prebieha) ----------------
+  var WEEKS = [
+    { n: 1, from: '2.11.', to: '7.11.' }, { n: 2, from: '9.11.', to: '14.11.' },
+    { n: 3, from: '16.11.', to: '21.11.' }, { n: 4, from: '23.11.', to: '28.11.', current: true },
+  ];
+  var DAYS = [{ n: 1, label: 'Deň 1 · Push', day: 'Po' }, { n: 2, label: 'Deň 2 · Nohy', day: 'St' }, { n: 3, label: 'Deň 3 · Pull', day: 'So' }];
+  // [sets, weight, rpe, note] plán | výkon
+  function P(s, w, r, n) { return { sets: s, weight: w, rpe: r, note: n || '' }; }
+  var ROWS = [
+    { day: 1, name: 'BENCH PRESS', w: { 1: [P('2x8', '70', '8'), P('2x8', '70', '7.5')], 2: [P('2x8', '72.5', '8'), P('2x8', '72.5', '8')], 3: [P('2x8', '75', '8'), P('2x8', '75', '8')], 4: [P('2x8', '77.5', '8'), P('2x8', '77.5', '8.5')] } },
+    { day: 1, name: 'INCLINE DB PRESS', w: { 1: [P('3x10', '26', '8'), P('3x10', '26', '8')], 2: [P('3x10', '28', '8'), P('3x10', '28', '8')], 3: [P('3x10', '28', '8'), P('3x10', '28', '8.5')], 4: [P('3x10', '28', '8'), P('10, 9, 9', '28', '9', 'posledná séria išla veľmi ťažko')] } },
+    { day: 1, name: 'CABLE FLY + LATERAL RAISE', w: { 1: [P('3x12', '15 a 8'), P('3x12', '15 a 8', '7 a 8')], 2: [P('3x12', '15 a 8', '8'), P('3x12', '17.5 a 8', '8 a 8')], 3: [P('3x12', '17.5 a 9', '8'), P('3x12', '17.5 a 9', '8 a 8')], 4: [P('3x12', '20 a 9', '8'), P('3x12', '20 a 9', '8 a 8.5')] } },
+    { day: 1, name: 'TRICEPS PUSHDOWN', w: { 1: [P('3x12', '25', '8'), P('3x12', '25', '7')], 2: [P('3x12', '27.5', '8'), P('3x12', '27.5', '7.5')], 3: [P('3x12', '30', '8'), P('3x12', '30', '8')], 4: [P('3x12', '30', '8'), P('3x12', '30', '7.5')] } },
+    { day: 2, name: 'SQUAT', w: { 1: [P('3x8', '90', '8'), P('3x8', '90', '7.5')], 2: [P('3x8', '95', '8', 'drž hĺbku'), P('3x8', '95', '8')], 3: [P('3x8', '95', '8'), P('3x8', '95', '8.5')], 4: [P('3x8', '95', '8'), P('3x8', '95', '9', 'dnes som bol unavený')] } },
+    { day: 2, name: 'ROMANIAN DEADLIFT', w: { 1: [P('3x8', '80', '8'), P('3x8', '80', '7')], 2: [P('3x8', '85', '8'), P('3x8', '85', '7.5')], 3: [P('3x8', '90', '8'), P('3x8', '90', '8')], 4: [P('3x8', '92.5', '8'), P('3x8', '92.5', '8')] } },
+    { day: 2, name: 'LEG PRESS', w: { 1: [P('3x12', '160', '8'), P('3x12', '160', '7.5')], 2: [P('3x12', '170', '8'), P('3x12', '170', '8')], 3: [P('3x12', '170', '8'), P('3x12', '170', '8')], 4: [P('3x12', '170', '8'), P('12, 10, 9', '160', '9', 'bolia ma kolená')] } },
+    { day: 2, name: 'CALF RAISE', w: { 1: [P('3x15', '60', '8'), P('3x15', '60', '8')], 2: [P('3x15', '60', '8'), P('3x15', '60', '8')], 3: [P('3x15', '60', '8'), P('3x15', '60', '8')], 4: [P('3x15', '60', '8'), P('3x15', '60', '8')] } },
+    { day: 3, name: 'LAT PULLDOWN', w: { 1: [P('3x10', '55', '8'), P('3x10', '55', '7.5')], 2: [P('3x10', '57.5', '8'), P('3x10', '57.5', '8')], 3: [P('3x10', '60', '8'), P('3x10', '60', '7.5')], 4: [P('3x10', '62.5', '8'), null] } },
+    { day: 3, name: 'SEATED ROW', w: { 1: [P('3x10', '50', '8'), P('3x10', '50', '7')], 2: [P('3x10', '52.5', '8'), P('3x10', '52.5', '7.5')], 3: [P('3x10', '55', '8', 'lakte k telu'), P('3x10', '55', '8')], 4: [P('3x10', '57.5', '8'), null] } },
+    { day: 3, name: 'BICEPS CURL', w: { 1: [P('3x12', '12', '8'), P('3x12', '12', '8')], 2: [P('3x12', '12', '8'), P('3x12', '12', '8')], 3: [P('3x12', '14', '8'), P('12, 10, 9', '14', '9.5')], 4: [P('3x12', '14', '8'), null] } },
+  ];
+  ROWS.forEach(function (r, i) { r.id = 'r' + i; });
+  var BODY = [85.6, 85.4, 85.5, 85.2, 85.3, 85.0, 84.9, 85.1, 84.8, 84.9, 84.7, 84.6, 84.8, 84.5, 84.4, 84.6, 84.3, 84.4, 84.2];
+  var CLIENTS = [
+    { id: 'me', name: 'Marián', block: 'COMEBACK NOV', last: 'dnes ráno váha · tréning v stredu' },
+    { id: 'p', name: 'Peter K.', block: 'HYPERTROFIA 2', last: 'tréning včera', demo: true, flags: [['up', '↑ 9 cvikov hore'], ['', 'všetko podľa plánu']], done: '3/4' },
+    { id: 'j', name: 'Jana M.', block: 'SILA 1', last: 'pred 6 dňami', demo: true, flags: [['warn', '6 dní bez tréningu'], ['down', '↓ 2 cviky klesajú']], done: '0/3' },
+  ];
+
+  // ---------------- Stav ----------------
+  var LS = 'fitko.proto.panel';
+  var saved = null;
+  try { saved = JSON.parse(localStorage.getItem(LS) || 'null'); } catch (e) { saved = null; }
+  var state = { view: 'clients', focus: null, draft: saved && saved.draft || null, sent: saved && saved.sent || null, metric: 'kg' };
+  function persist() { try { localStorage.setItem(LS, JSON.stringify({ draft: state.draft, sent: state.sent })); } catch (e) {} }
+
+  // ---------------- Výpočty ----------------
+  function cellOf(r, n) { var c = r.w[n]; return c ? { p: c[0], d: c[1] } : null; }
+  function vol(r, n) { var c = cellOf(r, n); if (!c || !c.d) return 0; return C.totalKg(C.volume(r.name, c.p, c.d)); }
+  function wNum(s) { var w = C.parseWeight(String(s || '').split(/\s+a\s+/)[0]); return w && w.lo ? w.lo : 0; }
+  function doneWeeks(r) { return WEEKS.filter(function (w) { var c = cellOf(r, w.n); return c && c.d; }).map(function (w) { return w.n; }); }
+  function rowTrend(r) {
+    var ns = doneWeeks(r); var v = ns.map(function (n) { return vol(r, n); });
+    var out = { kind: 'same', label: '→ stagnuje', why: '' };
+    if (v.length < 2) return { kind: 'same', label: '–', why: '' };
+    var last = v[v.length - 1], prev = v[v.length - 2];
+    var lastC = cellOf(r, ns[ns.length - 1]);
+    if (C.missed(r.name, lastC.p, lastC.d) || last < prev * 0.95) return { kind: 'down', label: '↓ klesá', why: C.missed(r.name, lastC.p, lastC.d) ? 'nezvládnuté opakovania' : 'nižší objem' };
+    var l3 = v.slice(-3);
+    if (l3.length === 3 && Math.max.apply(null, l3) / Math.min.apply(null, l3) - 1 <= 0.02) out = { kind: 'same', label: '→ stagnuje', why: '3 týždne bez rastu' };
+    else if (last > v[0] * 1.02) out = { kind: 'up', label: '↑ ide hore', why: C.formatPct(last / v[0] - 1) + ' za blok' };
+    // únava: rovnaká váha, RPE rastie 2× po sebe
+    if (ns.length >= 3) {
+      var a = cellOf(r, ns[ns.length - 3]).d, b = cellOf(r, ns[ns.length - 2]).d, c = lastC.d;
+      var ra = (C.parseRpe(a.rpe) || [0, 0])[1], rb = (C.parseRpe(b.rpe) || [0, 0])[1], rc = (C.parseRpe(c.rpe) || [0, 0])[1];
+      if (wNum(a.weight) === wNum(c.weight) && wNum(b.weight) === wNum(c.weight) && ra < rb && rb < rc) out.fatigue = true;
+    }
+    return out;
+  }
+  function insights() {
+    var g = { up: [], same: [], down: [], fatigue: [], notes: [] };
+    ROWS.forEach(function (r) {
+      var t = rowTrend(r);
+      if (t.kind === 'up') g.up.push(r.id); else if (t.kind === 'down') g.down.push(r.id); else if (t.label !== '–') g.same.push(r.id);
+      if (t.fatigue) g.fatigue.push(r.id);
+      var c = cellOf(r, 4); if (c && c.d && c.d.note) g.notes.push(r.id);
+    });
+    return g;
+  }
+  function weekVol(n) { return ROWS.reduce(function (a, r) { return a + vol(r, n); }, 0); }
+
+  // Návrh nového týždňa z výkonov (rovnaké pravidlá ako v ostrej apke – calc.js).
+  function buildDraft(mode) {
+    var vals = {};
+    ROWS.forEach(function (r) {
+      var c4 = cellOf(r, 4); if (!c4) return;
+      var ns = doneWeeks(r); var srcN = c4.d ? 4 : ns[ns.length - 1];
+      var src = srcN ? cellOf(r, srcN) : null;
+      var prevN = ns.filter(function (n) { return n < srcN; }).pop();
+      var prev = prevN ? cellOf(r, prevN) : null;
+      if (mode === 'copy') { vals[r.id] = { sets: c4.p.sets, weight: c4.p.weight, rpe: c4.p.rpe, note: c4.p.note, why: 'kópia T4', rule: 'copy' }; return; }
+      var s = C.suggest({ name: r.name, planned: c4.p, done: src ? src.d : {}, prevMissed: prev ? C.missed(r.name, prev.p, prev.d) : false, step: r.name === 'INCLINE DB PRESS' || r.name === 'BICEPS CURL' ? 2 : 2.5, pct: 0.05 });
+      vals[r.id] = { sets: s.fields.sets, weight: s.fields.weight, rpe: s.fields.rpe, note: s.fields.note, why: s.reason, rule: s.rule, review: s.review };
+    });
+    return { n: 5, mode: mode, vals: vals, edited: {}, extra: [] };
+  }
+
+  // ---------------- Render ----------------
+  var app = document.getElementById('app');
+  var layer = document.getElementById('layer');
+  function render() {
+    var x = window.scrollX, y = window.scrollY;
+    var gw = document.querySelector('.gridwrap'); var gx = gw ? gw.scrollLeft : null;
+    app.innerHTML = state.view === 'clients' ? renderClients() : renderPanel();
+    var gw2 = document.querySelector('.gridwrap'); if (gw2 && gx != null) gw2.scrollLeft = gx;
+    window.scrollTo(x, y);
+    renderBar();
+  }
+  function protoBar() {
+    return '<div class="proto"><span><b>Prototyp</b> · ukážkové dáta, do žiadnej tabuľky sa nič nezapisuje.</span><button data-a="reset">Obnoviť ukážku</button></div>';
+  }
+  function renderClients() {
+    var g = insights();
+    var me = '<button class="ccard" data-a="open" data-id="me"><div class="ccard-top"><div class="avatar">M</div><div><div class="ccard-name">Marián</div><div class="ccard-sub">COMEBACK NOV · týždeň 4</div></div></div>' +
+      '<div class="ccard-stats"><span><b>2/3</b> tréningy tento týždeň</span><span><b>84,2</b> kg ráno</span></div>' +
+      '<div class="flags"><span class="flag up">↑ ' + g.up.length + ' cvikov hore</span><span class="flag">→ ' + g.same.length + ' stagnujú</span><span class="flag down">↓ ' + g.down.length + ' klesajú</span><span class="flag warn">' + g.notes.length + ' nové poznámky</span></div></button>';
+    var card = function (c) {
+      return '<button class="ccard" data-a="demo"><div class="ccard-top"><div class="avatar">' + esc(c.name[0]) + '</div><div><div class="ccard-name">' + esc(c.name) + '</div><div class="ccard-sub">' + esc(c.block) + ' · ' + esc(c.last) + '</div></div></div>' +
+        '<div class="ccard-stats"><span><b>' + c.done + '</b> tréningy tento týždeň</span></div><div class="flags">' + c.flags.map(function (f) { return '<span class="flag ' + f[0] + '">' + esc(f[1]) + '</span>'; }).join('') + '</div></button>';
+    };
+    var jana = CLIENTS[2], peter = CLIENTS[1];
+    return protoBar() + '<div class="clients-head"><div><h1>Moji klienti</h1><p>Sobota 28. 11. · kto potrebuje pozornosť, je prvý</p></div></div>' +
+      '<div class="clients">' + card(jana) + me + card(peter) +
+      '<button class="ccard add-client" data-a="demo"><b>+ Pridať klienta</b><span>klient ti pošle svoj odkaz z apky</span></button></div>';
+  }
+  function sparkline(vals) {
+    var W = 200, H = 26, mn = Math.min.apply(null, vals), mx = Math.max.apply(null, vals);
+    var x = function (i) { return 2 + i * (W - 4) / (vals.length - 1); }, y = function (v) { return 3 + (1 - (v - mn) / (mx - mn || 1)) * (H - 6); };
+    return '<svg class="spark" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" aria-hidden="true"><path d="' + vals.map(function (v, i) { return (i ? 'L' : 'M') + x(i).toFixed(1) + ',' + y(v).toFixed(1); }).join(' ') + '"/><circle cx="' + x(vals.length - 1) + '" cy="' + y(vals[vals.length - 1]) + '" r="2.5"/></svg>';
+  }
+  function renderPanel() {
+    var g = insights();
+    var snap = '<div class="snap">' +
+      '<div class="tile"><span class="tile-k">Tento týždeň (T4)</span><span class="tile-v">2<small>/3 tréningy</small></span><span class="tile-s">Deň 3 · Pull čaká na sobotu</span></div>' +
+      '<button class="tile" data-a="body"><span class="tile-k">Ranná váha</span><span class="tile-v">84,2<small> kg</small></span><span class="tile-s"><span class="up">−0,6 kg</span> za 7 dní</span>' + sparkline(BODY) + '</button>' +
+      '<button class="tile" data-a="body"><span class="tile-k">Fotky progresu</span><span class="tile-v">22.11.<small> · 3 fotky</small></span><span class="tile-s">ďalšie v nedeľu</span></button></div>';
+    var chip = function (key, cls, label) { var n = g[key].length; if (!n) return ''; return '<button class="ins ' + cls + (state.focus === key ? ' on' : '') + '" data-a="focus" data-k="' + key + '"><b>' + n + '</b> ' + label + '</button>'; };
+    var ins = '<div class="insights"><span class="lbl">Na prvý pohľad</span>' + chip('up', 'up', 'cvikov ide hore') + chip('same', 'same', 'stagnuje') + chip('down', 'down', 'klesá') + chip('fatigue', 'warn', 'rastie únava (RPE pri rovnakej váhe)') + chip('notes', 'note', 'nové poznámky klienta') + '</div>';
+    var d = state.draft;
+    var tb = '<div class="toolbar"><span class="legend-inline">V bunke: <b>váha</b> · série × opakovania · RPE · <b>objem cviku</b> (série × opak. × kg) so zmenou oproti minulému týždňu</span><span class="spacer"></span>' +
+      (d ? '' : '<button class="btn primary" data-a="add">+ Pridať týždeň ' + (state.sent ? 6 : 5) + '</button>') + '</div>';
+    return protoBar() + '<div class="phead"><button class="back" data-a="clients" aria-label="Späť na klientov">‹</button><div><h1>Marián</h1><div class="sub">Blok COMEBACK NOV · od 2. 11. · 3 tréningy týždenne</div></div></div>' +
+      snap + ins + tb + '<div class="gridwrap">' + renderGrid(g) + '</div>';
+  }
+  function cellHtml(r, w) {
+    var c = cellOf(r, w.n);
+    if (!c) return '<td class="cell empty"></td>';
+    var prevN = w.n - 1, notes = '';
+    if (c.d && c.d.note) notes += '<button class="notebtn" data-a="note" data-r="' + r.id + '" data-w="' + w.n + '" aria-label="Poznámka klienta">!</button>';
+    if (c.p.note) notes += '<button class="notebtn coach" data-a="note" data-r="' + r.id + '" data-w="' + w.n + '" aria-label="Poznámka trénera">T</button>';
+    if (!c.d) {
+      return '<td class="cell plan">' + notes + '<div class="w">' + esc(c.p.weight) + ' kg</div><div class="s">plán ' + esc(prettySets(c.p.sets)) + (c.p.rpe ? ' · RPE ' + esc(c.p.rpe) : '') + '</div></td>';
+    }
+    var cls = '';
+    if (state.metric === 'vol') {
+      var a = vol(r, w.n), b = cellOf(r, prevN) && cellOf(r, prevN).d ? vol(r, prevN) : 0;
+      if (b) cls = a > b * 1.005 ? 'up' : a < b * 0.995 ? 'down' : '';
+      return '<td class="cell ' + cls + '">' + notes + '<div class="w">' + C.formatVolume(a) + '</div><div class="s">kg · ' + (b ? C.formatPct(a / b - 1) : '–') + '</div></td>';
+    }
+    var pv = cellOf(r, prevN), a1 = vol(r, w.n), b1 = pv && pv.d ? vol(r, prevN) : 0;
+    if (b1) cls = a1 > b1 * 1.005 ? 'up' : a1 < b1 * 0.995 ? 'down' : '';
+    var vl = a1 ? '<div class="v">objem <b>' + C.formatVolume(a1) + '</b>' + (b1 ? ' <span class="p ' + cls + '">' + C.formatPct(a1 / b1 - 1) + '</span>' : '') + '</div>' : '';
+    return '<td class="cell ' + cls + '">' + notes + '<div class="w">' + esc(c.d.weight.replace(/\./g, ',')) + ' kg</div><div class="s">' + esc(prettySets(c.d.sets)) + (c.d.rpe ? ' · RPE ' + esc(String(c.d.rpe).replace('.', ',')) : '') + '</div>' + vl + '</td>';
+  }
+  function draftCell(r) {
+    var d = state.draft, v = d.vals[r.id];
+    if (!v) return '<td class="draft"></td>';
+    var c4 = cellOf(r, 4), base = c4.p;
+    var dw = wNum(v.weight) - wNum(base.weight);
+    var chgW = String(v.weight) !== String(base.weight), chgS = String(v.sets) !== String(base.sets);
+    var edited = d.edited[r.id];
+    var lastN = doneWeeks(r).pop(), baseVol = lastN ? vol(r, lastN) : 0, nv = C.totalKg(C.volume(r.name, v, v));
+    var volLine = nv ? '<div class="v">objem <b>' + C.formatVolume(nv) + '</b>' + (baseVol ? ' <span class="p ' + (nv > baseVol * 1.005 ? 'up' : nv < baseVol * 0.995 ? 'down' : '') + '">' + C.formatPct(nv / baseVol - 1) + '</span> vs. T' + lastN : '') + '</div>' : '';
+    var why = edited ? '<div class="why">upravené tebou</div>' :
+      '<div class="why' + (v.review ? ' rev' : '') + '" title="' + esc(v.why) + '">' + (dw ? '<span class="d ' + (dw > 0 ? 'up' : 'down') + '">' + (dw > 0 ? '+' : '−') + kg(Math.abs(dw)) + ' kg</span>' : '') + '<span>' + esc(shortWhy(v)) + '</span></div>';
+    return '<td class="draft"><div class="dcell">' +
+      '<div class="dline"><input class="wt ' + (chgW ? 'chg' : '') + '" data-in="weight" data-r="' + r.id + '" value="' + esc(v.weight) + '" aria-label="Váha ' + esc(nice(r.name)) + '"><span class="unit">kg</span></div>' +
+      '<div class="dline"><input class="' + (chgS ? 'chg' : '') + '" data-in="sets" data-r="' + r.id + '" value="' + esc(v.sets) + '" aria-label="Série"><input data-in="rpe" data-r="' + r.id + '" value="' + esc(v.rpe) + '" aria-label="RPE" style="max-width:56px"></div>' + volLine + why + '</div></td>';
+  }
+  function shortWhy(v) {
+    if (v.rule === 'copy') return 'kópia T4';
+    if (v.review) return 'skontroluj – krok je veľký';
+    if (v.rule === 'R1') return 'bez zápisu';
+    if (v.rule === 'R3') return /2× po sebe/.test(v.why) ? '2× nezvládnuté' : 'nezvládnuté – ponechané';
+    if (v.rule === 'R4') return 'RPE nad plánom – ponechané';
+    if (v.rule === 'R5') return 'ľahké → +10 % objemu';
+    if (v.rule === 'R6') return /cieľ \d×\d+ opak/.test(v.why) ? v.why.replace(/^.*: /, '') : '+5 % objemu';
+    return '';
+  }
+  function renderGrid(g) {
+    var d = state.draft, sent = state.sent;
+    var weeks = WEEKS.slice();
+    var focusSet = state.focus ? g[state.focus] : null;
+    var head = '<thead><tr><th class="ex">Cvik</th>' + weeks.map(function (w) {
+      return '<th><b>T' + w.n + '</b>' + w.from + ' – ' + w.to + (w.current ? ' · prebieha' : '') + '</th>';
+    }).join('') + (sent ? '<th><b>T5</b>30.11. – 5.12. · odoslané</th>' : '') +
+      (d ? '<th class="draft"><div class="draft-head"><b>T' + d.n + ' · nový</b><span>' + (d.n === 5 ? '30.11. – 5.12.' : '7.12. – 12.12.') + '</span><div class="seg"><button class="' + (d.mode === 'suggest' ? 'on' : '') + '" data-a="mode" data-m="suggest">Návrh +5 %</button><button class="' + (d.mode === 'copy' ? 'on' : '') + '" data-a="mode" data-m="copy">Kópia T4</button></div></div></th>' : '') + '</tr></thead>';
+    var body = DAYS.map(function (day) {
+      var rows = ROWS.filter(function (r) { return r.day === day.n; });
+      var cols = weeks.length + 1 + (sent ? 1 : 0) + (d ? 1 : 0);
+      var out = '<tr class="dayrow"><th class="ex">' + esc(day.label) + '</th><th colspan="' + (cols - 1) + '"></th></tr>';
+      out += rows.map(function (r) {
+        var t = rowTrend(r);
+        var cls = focusSet ? (focusSet.indexOf(r.id) >= 0 ? 'hl' : 'dim') : '';
+        var plan = cellOf(r, 4).p;
+        return '<tr class="' + cls + '"><th class="ex"><button class="exname" data-a="ex" data-r="' + r.id + '">' + esc(nice(r.name)) + '</button><div class="exmeta"><span class="trend ' + t.kind + '" title="' + esc(t.why) + '">' + esc(t.label) + '</span><span>' + esc(prettySets(plan.sets)) + ' · RPE ' + esc(plan.rpe || '–') + '</span>' + (t.fatigue ? '<span class="trend down" title="RPE rastie pri rovnakej váhe">únava</span>' : '') + '</div></th>' +
+          weeks.map(function (w) { return cellHtml(r, w); }).join('') +
+          (sent ? '<td class="cell plan"><div class="w">' + esc(sent[r.id] ? sent[r.id].weight : '') + ' kg</div><div class="s">plán ' + esc(prettySets(sent[r.id] ? sent[r.id].sets : '')) + '</div></td>' : '') +
+          (d ? draftCell(r) : '') + '</tr>';
+      }).join('');
+      if (d) {
+        out += (d.extra || []).filter(function (e) { return e.day === day.n; }).map(function (e) {
+          return '<tr><th class="ex"><input class="nameinput" data-in="exname" data-x="' + e.id + '" value="' + esc(e.name) + '" placeholder="Názov nového cviku" style="width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:7px;background:var(--surface);color:var(--fg);font:inherit;font-weight:700"></th>' +
+            weeks.map(function () { return '<td class="cell empty"></td>'; }).join('') + (sent ? '<td class="cell empty"></td>' : '') +
+            '<td class="draft"><div class="dcell"><div class="dline"><input class="wt chg" data-in="xweight" data-x="' + e.id + '" value="' + esc(e.weight) + '" placeholder="kg"><span class="unit">kg</span></div><div class="dline"><input class="chg" data-in="xsets" data-x="' + e.id + '" value="' + esc(e.sets) + '" placeholder="3x10"><input data-in="xrpe" data-x="' + e.id + '" value="' + esc(e.rpe) + '" placeholder="RPE" style="max-width:56px"></div><div class="why">nový cvik</div></div></td></tr>';
+        }).join('');
+        out += '<tr><th class="ex"><button class="addex" data-a="addex" data-day="' + day.n + '">+ cvik do ' + esc(day.label.split(' · ')[0]) + '</button></th><td colspan="' + (cols - 1) + '"></td></tr>';
+      }
+      return out;
+    }).join('');
+    return '<table class="g">' + head + '<tbody>' + body + '</tbody></table>';
+  }
+  function draftStats() {
+    var d = state.draft, changed = 0, base = 0, next = 0;
+    ROWS.forEach(function (r) {
+      var v = d.vals[r.id]; if (!v) return; var p = cellOf(r, 4).p;
+      if (v.weight !== p.weight || v.sets !== p.sets || v.rpe !== p.rpe) changed++;
+      var b = C.totalKg(C.volume(r.name, p, p)), n = C.totalKg(C.volume(r.name, v, v));
+      if (b && n) { base += b; next += n; }
+    });
+    return { changed: changed + (d.extra || []).filter(function (e) { return e.name; }).length, pct: base ? next / base - 1 : 0 };
+  }
+  function renderBar() {
+    var old = document.getElementById('bar'); if (old) old.remove();
+    if (state.view !== 'panel' || !state.draft) return;
+    var s = draftStats(), d = state.draft;
+    var el = document.createElement('div'); el.className = 'bar'; el.id = 'bar';
+    el.innerHTML = '<div class="bar-in"><div class="info"><b>Týždeň ' + d.n + ' je rozpracovaný</b><br><span id="bar-sub">' + s.changed + ' zmien oproti T4 · uložené v prehliadači</span></div>' +
+      '<button class="btn" data-a="discard">Zahodiť</button><button class="btn primary" data-a="send">Odoslať klientovi</button></div>';
+    document.body.appendChild(el);
+  }
+  function updateBar() { var s = draftStats(); var el = document.getElementById('bar-sub'); if (el) el.textContent = s.changed + ' zmien oproti T4 · uložené v prehliadači'; }
+
+  // ---------------- Popover, bočný panel, toast ----------------
+  function closeLayer() { layer.innerHTML = ''; }
+  function showNote(btn) {
+    var r = ROWS.find(function (x) { return x.id === btn.dataset.r; }), c = cellOf(r, Number(btn.dataset.w));
+    var rect = btn.getBoundingClientRect();
+    var html = '<div class="pop" style="top:' + Math.min(rect.bottom + 6, window.innerHeight - 160) + 'px;left:' + Math.max(8, Math.min(rect.left - 150, window.innerWidth - 310)) + 'px">' +
+      '<b>' + esc(nice(r.name)) + ' · T' + btn.dataset.w + '</b>' +
+      (c.d && c.d.note ? '<div><div class="who">Klient</div>„' + esc(c.d.note) + '“</div>' : '') +
+      (c.p.note ? '<div><div class="who">Tréner</div>' + esc(c.p.note) + '</div>' : '') + '</div>';
+    layer.innerHTML = html;
+  }
+  function chart(series, series2) {
+    var W = 380, H = 170, L = 40, R = 10, T = 14, B = 24;
+    var all = series.concat(series2 || []).filter(function (v) { return v != null; });
+    var mn = Math.min.apply(null, all), mx = Math.max.apply(null, all); if (mn === mx) { mn -= 1; mx += 1; }
+    var pad = (mx - mn) * .15; mn -= pad; mx += pad;
+    var x = function (i) { return L + i * (W - L - R) / (series.length - 1 || 1); }, y = function (v) { return T + (1 - (v - mn) / (mx - mn)) * (H - T - B); };
+    var path = function (s) { return s.map(function (v, i) { return v == null ? '' : ((i && s[i - 1] != null ? 'L' : 'M') + x(i).toFixed(1) + ',' + y(v).toFixed(1)); }).join(' '); };
+    var grid = [0, .5, 1].map(function (f) { var v = mn + (mx - mn) * f; return '<line class="grid" x1="' + L + '" x2="' + (W - R) + '" y1="' + y(v) + '" y2="' + y(v) + '"/><text class="axis" x="' + (L - 6) + '" y="' + (y(v) + 3) + '" text-anchor="end">' + kg(Math.round(v * 10) / 10) + '</text>'; }).join('');
+    var lbl = series.map(function (v, i) { return '<text class="axis" x="' + x(i) + '" y="' + (H - 6) + '" text-anchor="middle">T' + (i + 1) + '</text>'; }).join('');
+    var dots = series.map(function (v, i) { return v == null ? '' : '<circle class="dot" cx="' + x(i) + '" cy="' + y(v) + '" r="3.5"/>'; }).join('');
+    return '<svg class="chart" viewBox="0 0 ' + W + ' ' + H + '" role="img">' + grid + (series2 ? '<path class="l2" d="' + path(series2) + '"/>' : '') + '<path class="l1" d="' + path(series) + '"/>' + dots + lbl + '</svg>';
+  }
+  function showEx(id) {
+    var r = ROWS.find(function (x) { return x.id === id; });
+    var w = WEEKS.map(function (wk) { var c = cellOf(r, wk.n); return c && c.d ? wNum(c.d.weight) : null; });
+    var v = WEEKS.map(function (wk) { var c = cellOf(r, wk.n); return c && c.d ? vol(r, wk.n) : null; });
+    var notes = [];
+    WEEKS.forEach(function (wk) { var c = cellOf(r, wk.n); if (!c) return; if (c.p.note) notes.push(['Tréner · T' + wk.n, c.p.note]); if (c.d && c.d.note) notes.push(['Klient · T' + wk.n, '„' + c.d.note + '“']); });
+    var t = rowTrend(r);
+    layer.innerHTML = '<div class="drawer-bg" data-a="close"></div><aside class="drawer" role="dialog" aria-label="Detail cviku"><div class="drawer-head"><h2>' + esc(nice(r.name)) + '</h2><button class="back" data-a="close" aria-label="Zavrieť">×</button></div>' +
+      '<div class="flags"><span class="flag ' + t.kind + '">' + esc(t.label) + (t.why ? ' · ' + esc(t.why) : '') + '</span></div>' +
+      '<div><h3 style="font-size:15px;margin-bottom:6px">Váha (kg)</h3>' + chart(w) + '</div>' +
+      '<div><h3 style="font-size:15px;margin-bottom:6px">Objem (kg)</h3>' + chart(v) + '</div>' +
+      '<div class="legend"><span>V ostrej verzii aj staršie bloky (MESOCYCLE 1.0…).</span></div>' +
+      '<div><h3 style="font-size:15px;margin-bottom:6px">Poznámky</h3><div class="notes">' + (notes.length ? notes.map(function (n) { return '<div class="note"><div class="who">' + esc(n[0]) + '</div>' + esc(n[1]) + '</div>'; }).join('') : '<div class="note">Zatiaľ žiadne.</div>') + '</div></div></aside>';
+  }
+  function showBody() {
+    layer.innerHTML = '<div class="drawer-bg" data-a="close"></div><aside class="drawer" role="dialog" aria-label="Telo a fotky"><div class="drawer-head"><h2>Ranná váha a fotky</h2><button class="back" data-a="close" aria-label="Zavrieť">×</button></div>' +
+      '<div class="snap" style="grid-template-columns:repeat(3,minmax(0,1fr))"><div class="tile"><span class="tile-k">Posledná</span><span class="tile-v">84,2</span></div><div class="tile"><span class="tile-k">Priemer 7 dní</span><span class="tile-v">84,4</span></div><div class="tile"><span class="tile-k">Za 3 týždne</span><span class="tile-v">−1,4</span></div></div>' +
+      chart(BODY.filter(function (_, i) { return i % 3 === 0; })).replace(/>T(\d+)</g, function (m, n) { return '>' + (2 + (n - 1) * 3) + '.11.<'; }) +
+      '<div class="notes"><div class="note"><div class="who">Fotky · ne 22. 11.</div>3 fotky · otvoriť na Drive</div><div class="note"><div class="who">Fotky · ne 15. 11.</div>3 fotky · otvoriť na Drive</div></div></aside>';
+  }
+  var toastT;
+  function toast(msg) {
+    var el = document.querySelector('.toast'); if (el) el.remove();
+    el = document.createElement('div'); el.className = 'toast'; el.setAttribute('role', 'status'); el.textContent = msg; document.body.appendChild(el);
+    clearTimeout(toastT); toastT = setTimeout(function () { el.remove(); }, 2800);
+  }
+
+  // ---------------- Udalosti ----------------
+  document.addEventListener('click', function (e) {
+    var t = e.target.closest('[data-a]');
+    if (!t) { if (!e.target.closest('.pop')) { var p = layer.querySelector('.pop'); if (p) closeLayer(); } return; }
+    var a = t.dataset.a;
+    if (a !== 'note') { var pop = layer.querySelector('.pop'); if (pop) closeLayer(); }
+    switch (a) {
+      case 'open': state.view = 'panel'; state.focus = null; render(); window.scrollTo(0, 0); break;
+      case 'clients': state.view = 'clients'; closeLayer(); render(); window.scrollTo(0, 0); break;
+      case 'demo': toast('V prototype má dáta len Marián'); break;
+      case 'reset': state.draft = null; state.sent = null; state.focus = null; persist(); render(); toast('Ukážka obnovená'); break;
+      case 'focus': state.focus = state.focus === t.dataset.k ? null : t.dataset.k; render(); break;
+      case 'metric': state.metric = t.dataset.m; render(); break;
+      case 'add':
+        if (state.sent) { toast('V prototype sa dá pridať len týždeň 5 – klikni Obnoviť ukážku'); break; }
+        state.draft = buildDraft('suggest'); persist(); render();
+        var gw = document.querySelector('.gridwrap'); if (gw) gw.scrollLeft = gw.scrollWidth; break;
+      case 'mode':
+        if (Object.keys(state.draft.edited).length && !window.__okMode) { window.__okMode = true; toast('Ručné úpravy sa prepíšu – klikni znova'); break; }
+        window.__okMode = false; var ex = state.draft.extra; state.draft = buildDraft(t.dataset.m); state.draft.extra = ex; persist(); render(); break;
+      case 'addex': state.draft.extra.push({ id: 'x' + Date.now(), day: Number(t.dataset.day), name: '', sets: '3x10', weight: '', rpe: '8' }); persist(); render();
+        var inp = document.querySelector('[data-in="exname"][data-x="' + state.draft.extra[state.draft.extra.length - 1].id + '"]'); if (inp) inp.focus(); break;
+      case 'discard': state.draft = null; persist(); render(); toast('Rozpracovaný týždeň zahodený'); break;
+      case 'send': {
+        var sent = {}; ROWS.forEach(function (r) { if (state.draft.vals[r.id]) sent[r.id] = state.draft.vals[r.id]; });
+        state.sent = sent; state.draft = null; persist(); render();
+        toast('Týždeň 5 je v tabuľke · klient ho uvidí v apke'); break;
+      }
+      case 'note': showNote(t); break;
+      case 'ex': showEx(t.dataset.r); break;
+      case 'body': showBody(); break;
+      case 'close': closeLayer(); break;
+    }
+  });
+  document.addEventListener('input', function (e) {
+    var el = e.target, k = el.dataset.in; if (!k || !state.draft) return;
+    if (el.dataset.r) { var v = state.draft.vals[el.dataset.r]; v[k] = el.value; state.draft.edited[el.dataset.r] = true; }
+    else if (el.dataset.x) { var x = state.draft.extra.find(function (q) { return q.id === el.dataset.x; }); var map = { exname: 'name', xweight: 'weight', xsets: 'sets', xrpe: 'rpe' }; x[map[k]] = el.value; }
+    persist(); updateBar();
+  });
+  document.addEventListener('change', function (e) { if (e.target.dataset.in && state.draft) render(); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeLayer(); });
+  if (state.draft) state.view = 'panel';
+  render();
+})();
+</script>

@@ -362,9 +362,35 @@
     };
   }
 
+  /*
+   * Trend cviku za blok (trénerov panel, spec 003 US3).
+   * list: odcvičené záznamy chronologicky [{ planned, done }]
+   * out: { kind: 'up' | 'same' | 'down' | 'none', why, fatigue }
+   */
+  function trend(name, list) {
+    const pts = (list || []).filter((x) => hasAny(x.done));
+    const vals = pts.map((x) => sum(volume(name, x.planned, x.done).map((v) => (v ? v.value : 0))));
+    const out = { kind: 'none', why: '', fatigue: false };
+    if (pts.length >= 3) {
+      const l3 = pts.slice(-3);
+      const w = l3.map((x) => { const p = parseWeight(splitValues(x.done.weight, Math.max(1, splitParts(name).length), false)[0]); return p && p.lo ? p.lo : null; });
+      const r = l3.map((x) => { const p = parseRpe(splitValues(x.done.rpe, Math.max(1, splitParts(name).length), true)[0]); return p ? p[1] : null; });
+      out.fatigue = w[0] != null && w[0] === w[1] && w[1] === w[2] && r.every((x) => x != null) && r[0] < r[1] && r[1] < r[2];
+    }
+    if (pts.length < 2 || !(vals[0] > 0)) return out;
+    const last = vals[vals.length - 1], prev = vals[vals.length - 2], first = vals[0];
+    const lp = pts[pts.length - 1];
+    if (missed(name, lp.planned, lp.done)) return { ...out, kind: 'down', why: 'nezvládnuté opakovania' };
+    if (last < prev * 0.95) return { ...out, kind: 'down', why: `objem ${formatPct(last / prev - 1)} oproti minulému týždňu` };
+    const l3 = vals.slice(-3);
+    if (l3.length === 3 && Math.max(...l3) / Math.min(...l3) - 1 <= 0.02) return { ...out, kind: 'same', why: '3 týždne bez rastu objemu' };
+    if (last > first * 1.02) return { ...out, kind: 'up', why: `objem ${formatPct(last / first - 1)} za blok` };
+    return { ...out, kind: 'same', why: 'bez výrazného rastu' };
+  }
+
   const api = {
     splitParts, splitValues, parseSets, parseRpe, parseWeight, hasAny,
-    volume, totalKg, missed, suggest, suggestPart,
+    volume, totalKg, missed, suggest, suggestPart, trend,
     formatVolume, formatPct, formatSets, fmtKg,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
