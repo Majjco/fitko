@@ -98,7 +98,25 @@ function assert(c, msg) { if (!c) throw new Error('FAIL: ' + msg); console.log('
   await page.click('[data-action=tab][data-tab=today]');
   await page.click('[data-action=settings]');
   assert(await page.isVisible('[data-action=copy-coach]'), 'nastavenia: odkaz pre trénera');
-  assert((await page.textContent('.app-version')).includes('17'), 'verzia 17');
+  assert((await page.textContent('.app-version')).includes('18'), 'verzia 18');
+  // téma Matrix
+  await page.click('[data-action=theme][data-theme=matrix]');
+  assert(await page.evaluate(() => document.documentElement.dataset.theme) === 'matrix', 'téma Matrix zapnutá');
+  assert(await page.locator('#rain').count() === 1, 'Matrix: padajúci kód v pozadí');
+  await page.reload();
+  await page.waitForSelector('.hero');
+  assert(await page.evaluate(() => document.documentElement.dataset.theme) === 'matrix', 'téma sa pamätá po obnovení');
+  if (OUT) {
+    await page.waitForTimeout(1500);
+    await page.screenshot({ path: `${OUT}/v18-matrix-today.png` });
+    await page.click('.hero [data-action=open-day]');
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: `${OUT}/v18-matrix-wo.png` });
+    await page.click('[data-action=back]');
+  }
+  await page.click('[data-action=settings]');
+  await page.click('[data-action=theme][data-theme=volt]');
+  assert(await page.evaluate(() => document.documentElement.dataset.theme) === 'volt', 'späť na Volt');
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1);
   assert(!overflow, 'žiadne vodorovné posúvanie');
   await browser.close();
